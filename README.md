@@ -1,13 +1,12 @@
-# CrateDBClient
+# CrateDB HTTP API Client for Node.js
 
-A lightweight Node.js client derived from node-crate and utilizing configuration options inspired by node-postgres. This client supports connection strings, persistent connections, and configuration options specifically designed for CrateDB environment variables.
+This library is a lightweight Node.js client derived from `node-crate` for interacting with CrateDB via its **HTTP endpoint**. Unlike libraries such as `node-postgres`, which use the PostgreSQL wire protocol, this client communicates with CrateDB's native HTTP API.
 
 > [!CAUTION]
 > **This library is primarily a proof of concept.**  
 > While it provides basic functionality to interact with CrateDB, it is not production-ready and lacks the robustness of established libraries.  
 > 
-> For production use, consider mature libraries like [`node-postgres`](https://node-postgres.com/) which leverage CrateDB's PostgreSQL compatibility.  
-> Use this client only for **testing, experimentation**, or learning CrateDB concepts.
+> For production use, consider mature libraries like [`node-postgres`](https://node-postgres.com/) which leverage CrateDB's PostgreSQL compatibility. Use this client only for **testing, experimentation**, or if you know what you're doing. :wink:
 
 
 ## Configuration
@@ -80,6 +79,21 @@ Insert a new row into a specified table.
 
 ```js
 await client.insert('my_table', { column1: 'value1', column2: 'value2' });
+```
+
+#### bulkInsert(tableName, jsonArray)
+
+Insert multiple rows into a table using bulk operations.
+
+```js
+const bulkData = [
+  { id: 1, name: 'Earth', kind: 'Planet', description: 'A beautiful place.' },
+  { id: 2, name: 'Mars', kind: 'Planet', description: 'The red planet.' },
+  { id: 3, name: 'Sun', kind: 'Star', description: 'A hot and fiery place.' },
+];
+
+const rowCounts = await client.bulkInsert('my_table', bulkData);
+console.log('Row counts:', rowCounts);
 ```
 
 #### update(tableName, options, whereClause)
