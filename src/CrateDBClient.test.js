@@ -107,4 +107,41 @@ describe("CrateDBClient", () => {
     // Clean up
     await client.executeSql(`DROP TABLE ${tableName}`);
   });
+
+  it("should stream results using streamQuery()", async () => {
+    const tableName = "stream_test_table";
+
+    // Create the table and insert test data
+    await client.createTable({
+      [tableName]: {
+        id: "INT PRIMARY KEY",
+        name: "TEXT",
+        value: "TEXT",
+      },
+    });
+
+    const testData = [
+      { id: 1, name: "Alice", value: "Test 1" },
+      { id: 2, name: "Bob", value: "Test 2" },
+      { id: 3, name: "Charlie", value: "Test 3" },
+      { id: 4, name: "Diana", value: "Test 4" },
+      { id: 5, name: "Eve", value: "Test 5" },
+      { id: 6, name: "Frank", value: "Test 6" },
+    ];
+
+    await client.bulkInsert(tableName, testData);
+    await client.refresh(tableName);
+
+    // Stream query results
+    const results = [];
+    for await (const row of client.streamQuery(`SELECT * FROM ${tableName} ORDER BY id`, 2)) {
+      results.push(row);
+    }
+
+    // Validate the streamed results
+    expect(results).toEqual(testData);
+
+    // Clean up
+    await client.drop(tableName);
+  });
 });

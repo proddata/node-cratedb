@@ -68,6 +68,17 @@ class CrateDBClient {
     return new CrateDBCursor(this, sql);
   }
 
+  async *streamQuery(sql, batchSize = 100) {
+    const cursor = this.createCursor(sql);
+  
+    try {
+      await cursor.open();
+      yield* cursor.iterate(batchSize);
+    } finally {
+      await cursor.close();
+    }
+  }
+
   async executeSql(sql, args = []) {
     const options = { ...this.httpOptions, body: JSON.stringify({ stmt: sql, args }) };
     const response = await this._makeRequest(options, this.protocol);

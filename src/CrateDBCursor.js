@@ -30,10 +30,13 @@ export class CrateDBCursor {
   async fetchone() {
     this._ensureOpen();
     const result = await this._execute(`FETCH NEXT FROM ${this.cursorName}`);
-    return result.length > 0 ? result[0] : null;
+    return result ? result[0] : result; // Return the first row or null
   }
 
   async fetchmany(size = 10) {
+    if(size < 1) {  // Return an empty array if size is less than 1
+      return [];
+    }
     this._ensureOpen();
     return await this._execute(`FETCH ${size} FROM ${this.cursorName}`);
   }
@@ -41,6 +44,22 @@ export class CrateDBCursor {
   async fetchall() {
     this._ensureOpen();
     return await this._execute(`FETCH ALL FROM ${this.cursorName}`);
+  }
+
+  async *iterate(size = 100) {
+    this._ensureOpen();
+  
+    while (true) {
+      const rows = await this.fetchmany(size);
+  
+      if (!rows || rows.length === 0) {
+        break; // Stop iteration when no more rows are returned
+      }
+  
+      for (const row of rows) {
+        yield row; // Yield one row at a time
+      }
+    }
   }
 
   async close() {
@@ -59,17 +78,14 @@ export class CrateDBCursor {
     const options = { ...this.connectionOptions, body: JSON.stringify({ stmt: sql }) };
     try {
       const response = await this.client._makeRequest(options, this.client.protocol);
-      return this._rebuildObjects(JSON.parse(response)) || [];
+      const { cols, rows, rowcount } = JSON.parse(response);
+      return rowcount > 0 ? this._rebuildObjects(cols, rows) : null;
     } catch (error) {
       throw new Error(`Error executing SQL: ${sql}. Details: ${error.message}`);
     }
   }
 
-  _rebuildObjects(data) {
-    const { cols, rows } = data;
-    if (!rows || rows.length === 0) {
-      return [];
-    }
+  _rebuildObjects(cols, rows) {
     return rows.map((row) => {
       const obj = {};
       cols.forEach((col, index) => {
