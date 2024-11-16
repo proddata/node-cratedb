@@ -33,6 +33,7 @@ describe("CrateDBClient", () => {
       host: host,
       port: mappedPort,
       defaultSchema: "sys",
+      maxConnections: 1,
     });
 
     await waitForDatabase(client);

@@ -25,7 +25,7 @@ The `CrateDBClient` can be configured with either environment variables or direc
 | `connectionString` | `string`            | `null`                                          | Connection string, e.g., `https://user:password@host:port/`.    |
 | `ssl`              | `object` or `null`  | `null`                                          | SSL configuration;                                              |
 | `keepAlive`        | `boolean`           | `true`                                          | Enables HTTP keep-alive for persistent connections.             |
-| `maxSockets`       | `number`            | `Infinity`                                      | Limits the maximum number of concurrent connections.            |
+| `maxConnections`   | `number`            | `20`                                      | Limits the maximum number of concurrent connections.            |
 
 ### Environment Variables
 
@@ -58,7 +58,7 @@ const client = new CrateDBClient({
   port: 5334,
   defaultSchema: 'my_schema',
   keepAlive: true, // Enable persistent connections
-  maxSockets: 10  // Limit to 10 concurrent sockets
+  maxConnections: 20  // Limit to 20 concurrent sockets
 });
 ```
 

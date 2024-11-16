@@ -15,7 +15,7 @@ const defaultConfig = {
   connectionString: null,
   ssl: false,
   keepAlive: true, // Enable persistent connections by default
-  maxSockets: Infinity, // Default to unlimited sockets
+  maxConnections: 20,
 };
 
 class CrateDBClient {
@@ -35,7 +35,8 @@ class CrateDBClient {
     // Set up HTTP(S) agent options based on configuration
     const agentOptions = {
       keepAlive: cfg.keepAlive,
-      maxSockets: cfg.maxSockets,
+      maxSockets: cfg.maxConnections,
+      maxFreeSockets: cfg.maxConnections,
       scheduling: 'fifo',
     };
 
@@ -175,6 +176,6 @@ export { CrateDBClient };
 //   port: 5334,
 //   ssl: true,             // Use HTTPS
 //   keepAlive: true,       // Enable persistent connections
-//   maxSockets: 10,         // Limit to 10 concurrent sockets
+//   maxConnections: 20,         // Limit to 10 concurrent sockets
 //   defaultSchema: 'my_schema' // Default schema for queries
 // });
