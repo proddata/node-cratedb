@@ -62,7 +62,7 @@ const client = new CrateDBClient({
 });
 ```
 
-### CRUD Operations
+### General Operations
 
 #### executeSql(sql, args)
 
@@ -87,6 +87,8 @@ for await (const row of client.streamQuery('SELECT * FROM my_table ORDER BY id',
   console.log(row); // Process each row individually
 }
 ```
+
+### CRUD Operations
 
 #### insert(tableName, options)
 
@@ -131,7 +133,7 @@ await client.delete('my_table', 'column1 = value1');
 
 Drop a specified table.
 
-```
+```js
 await client.drop('my_table');
 ```
 
@@ -168,9 +170,6 @@ await cursor.close(); // Close the cursor and commit the transaction
 
 #### iterate(batchSize)
 
-The CrateDBCursor class allows you to iterate over query results using an async
-generator. This is especially useful for processing large datasets efficiently.
-
 Creates an async generator that fetches query results in chunks of size
 batchSize (default is 100).
 
@@ -187,12 +186,19 @@ await cursor.close();
 
 ### Connection Management
 
-Configure keepAlive for persistent connections and maxSockets to limit concurrent connections.
+Configure keepAlive for persistent connections and maxConnections to limit
+concurrent connections.
 
 ```js
 const client = new CrateDBClient({
-  keepAlive: true,
-  maxSockets: 5
+  user: 'database-user',
+  password: 'secretpassword!!',
+  host: 'my.database-server.com',
+  port: 4200,
+  ssl: true,             // Use HTTPS
+  keepAlive: true,       // Enable persistent connections
+  maxConnections: 20,         // Limit to 10 concurrent sockets
+  defaultSchema: 'my_schema' // Default schema for queries
 });
 ```
 
