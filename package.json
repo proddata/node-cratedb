@@ -2,19 +2,31 @@
   "name": "node-cratedb",
   "version": "0.0.1",
   "description": "Node.js client for CrateDB",
-  "main": "index.js",
+  "main": "src/CrateDBClient.js",
   "type": "module",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "vitest",
+    "test:watch": "vitest --watch"
   },
   "repository": {
     "type": "git",
-    "url": "node-cratedb"
+    "url": "https://github.com/proddata/node-cratedb.git"
   },
   "keywords": [
     "cratedb",
-    "crate"
+    "crate",
+    "database",
+    "nodejs",
+    "sql",
+    "client"
   ],
   "author": "Georg Traar",
-  "license": "MIT"
+  "license": "MIT",
+  "devDependencies": {
+    "testcontainers": "^10.14.0",
+    "vitest": "^2.1.5"
+  },
+  "engines": {
+    "node": ">=16.0.0"
+  }
 }
