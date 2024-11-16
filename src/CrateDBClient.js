@@ -3,6 +3,7 @@
 import http from 'http';
 import https from 'https';
 import { URL } from 'url';
+import { CrateDBCursor } from './CrateDBCursor.js';
 
 // Configuration options with CrateDB-specific environment variables
 const defaultConfig = {
@@ -10,10 +11,11 @@ const defaultConfig = {
   password: process.env.CRATEDB_PASSWORD || '',
   host: process.env.CRATEDB_HOST || 'localhost',
   port: process.env.CRATEDB_PORT ? parseInt(process.env.CRATEDB_PORT, 10) : 4200, // Default CrateDB port
+  defaultSchema: process.env.CRATEDB_HOST || 'doc', // Default schema for queries
   connectionString: null,
   ssl: false,
   keepAlive: true, // Enable persistent connections by default
-  maxSockets: Infinity // Default to unlimited sockets
+  maxSockets: Infinity, // Default to unlimited sockets
 };
 
 class CrateDBClient {
@@ -33,7 +35,8 @@ class CrateDBClient {
     // Set up HTTP(S) agent options based on configuration
     const agentOptions = {
       keepAlive: cfg.keepAlive,
-      maxSockets: cfg.maxSockets
+      maxSockets: cfg.maxSockets,
+      scheduling: 'fifo',
     };
 
     this.httpAgent = cfg.ssl ? new https.Agent(agentOptions) : new http.Agent(agentOptions);
@@ -50,6 +53,7 @@ class CrateDBClient {
         ...(cfg.user && cfg.password
           ? { Authorization: `Basic ${Buffer.from(`${cfg.user}:${cfg.password}`).toString('base64')}` }
           : {}),
+        ...(cfg.defaultSchema ? { 'Default-Schema': cfg.defaultSchema } : {}),
       },
       auth: cfg.user && cfg.password ? `${cfg.user}:${cfg.password}` : undefined,
       agent: this.httpAgent
@@ -57,6 +61,10 @@ class CrateDBClient {
 
     this.protocol = cfg.ssl ? 'https' : 'http';
 
+  }
+
+  createCursor(sql) {
+    return new CrateDBCursor(this, sql);
   }
 
   async executeSql(sql, args = []) {
@@ -69,6 +77,38 @@ class CrateDBClient {
     const { keys, values, args } = this._prepareOptions(options);
     const query = `INSERT INTO ${tableName} (${keys}) VALUES (${values})`;
     return await this.executeSql(query, args);
+  }
+
+  async bulkInsert(tableName, jsonArray) {
+    if (!Array.isArray(jsonArray) || jsonArray.length === 0) {
+      throw new Error('bulkInsert requires a non-empty array of objects.');
+    }
+  
+    // Extract unique keys from all objects
+    const uniqueKeys = Array.from(
+      jsonArray.reduce((keys, obj) => {
+        Object.keys(obj).forEach((key) => keys.add(key));
+        return keys;
+      }, new Set())
+    );
+  
+    // Transform JSON array into the bulk_args format
+    const bulkArgs = jsonArray.map((obj) =>
+      uniqueKeys.map((key) => (obj.hasOwnProperty(key) ? obj[key] : null))
+    );
+  
+    const placeholders = uniqueKeys.map(() => '?').join(', ');
+    const stmt = `INSERT INTO ${tableName} (${uniqueKeys.join(', ')}) VALUES (${placeholders})`;
+  
+    const options = {
+      ...this.httpOptions,
+      body: JSON.stringify({ stmt, bulk_args: bulkArgs }),
+    };
+  
+    const response = await this._makeRequest(options);
+    const parsedResponse = JSON.parse(response);
+  
+    return parsedResponse.results.map((result) => result.rowcount);
   }
 
   async update(tableName, options, whereClause) {
@@ -88,6 +128,11 @@ class CrateDBClient {
     return await this.executeSql(query);
   }
 
+  async refresh(tableName) {
+    const query = `REFRESH TABLE ${tableName}`;
+    return await this.executeSql(query);
+  }
+
   async createTable(schema) {
     const tableName = Object.keys(schema)[0];
     const columns = Object.entries(schema[tableName])
@@ -104,11 +149,11 @@ class CrateDBClient {
     return { keys, values, args };
   }
 
-  async _makeRequest(options, protocol) {
+  async _makeRequest(options) {
     return new Promise((resolve, reject) => {
-      const req = (protocol === 'https' ? https : http).request(options, (response) => {
+      const req = (this.protocol === 'https' ? https : http).request(options, (response) => {
         let data = [];
-        response.on('data', chunk => data.push(chunk));
+        response.on('data', (chunk) => data.push(chunk));
         response.on('end', () => resolve(Buffer.concat(data).toString()));
       });
 
@@ -130,5 +175,6 @@ export { CrateDBClient };
 //   port: 5334,
 //   ssl: true,             // Use HTTPS
 //   keepAlive: true,       // Enable persistent connections
-//   maxSockets: 10         // Limit to 10 concurrent sockets
+//   maxSockets: 10,         // Limit to 10 concurrent sockets
+//   defaultSchema: 'my_schema' // Default schema for queries
 // });

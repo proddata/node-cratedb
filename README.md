@@ -2,6 +2,13 @@
 
 A lightweight Node.js client derived from node-crate and utilizing configuration options inspired by node-postgres. This client supports connection strings, persistent connections, and configuration options specifically designed for CrateDB environment variables.
 
+> [!CAUTION]
+> **This library is primarily a proof of concept.**  
+> While it provides basic functionality to interact with CrateDB, it is not production-ready and lacks the robustness of established libraries.  
+> 
+> For production use, consider mature libraries like [`node-postgres`](https://node-postgres.com/) which leverage CrateDB's PostgreSQL compatibility.  
+> Use this client only for **testing, experimentation**, or learning CrateDB concepts.
+
 
 ## Configuration
 
@@ -9,17 +16,17 @@ The `CrateDBClient` can be configured with either environment variables or direc
 
 ### Configuration Options
 
-| Option             | Type                | Default Value                                   | Description                                                                                 |
-|--------------------|---------------------|-------------------------------------------------|---------------------------------------------------------------------------------------------|
-| `user`             | `string`            | `'crate'` or `process.env.CRATEDB_USER`            | Database user.                                                                              |
-| `password`         | `string` or `null`  | `''` or `process.env.CRATEDB_PASSWORD`           | Database password.                                                                          |
-| `host`             | `string`            | `'localhost'`  or `process.env.CRATEDB_HOST`      | Database host.                                                                              |
-| `port`             | `number`            | `4200` or `process.env.CRATEDB_PORT`               | Database port.                                                                              |
-| `database`         | `string`            | `user` or `process.env.CRATEDB_DATABASE`          | Database name.                                                                              |
-| `connectionString` | `string`            | `null`                                          | Connection string, e.g., `https://user:password@host:port/`.                         |
-| `ssl`              | `object` or `null`  | `null`                                          | SSL configuration;                                        |
-| `keepAlive`        | `boolean`           | `true`                                          | Enables HTTP keep-alive for persistent connections.                                         |
-| `maxSockets`       | `number`            | `Infinity`                                      | Limits the maximum number of concurrent connections.                                        |
+| Option             | Type                | Default Value                                   | Description                                                     |
+|--------------------|---------------------|-------------------------------------------------|-----------------------------------------------------------------|
+| `user`             | `string`            | `'crate'` or `process.env.CRATEDB_USER`         | Database user.                                                  |
+| `password`         | `string` or `null`  | `''` or `process.env.CRATEDB_PASSWORD`          | Database password.                                              |
+| `host`             | `string`            | `'localhost'`  or `process.env.CRATEDB_HOST`    | Database host.                                                  |
+| `port`             | `number`            | `4200` or `process.env.CRATEDB_PORT`            | Database port.                                                  |
+| `defaultSchema`    | `string`            | `'doc'` or `process.env.CRATEDB_DEFAULT_SCHEMA` | Default schema for queries.                                     |
+| `connectionString` | `string`            | `null`                                          | Connection string, e.g., `https://user:password@host:port/`.    |
+| `ssl`              | `object` or `null`  | `null`                                          | SSL configuration;                                              |
+| `keepAlive`        | `boolean`           | `true`                                          | Enables HTTP keep-alive for persistent connections.             |
+| `maxSockets`       | `number`            | `Infinity`                                      | Limits the maximum number of concurrent connections.            |
 
 ### Environment Variables
 
@@ -30,7 +37,7 @@ export CRATEDB_USER=crate
 export CRATEDB_PASSWORD=secretpassword
 export CRATEDB_HOST=my.database-server.com
 export CRATEDB_PORT=4200
-export CRATEDB_DATABASE=mydatabase
+export CRATEDB_DEFAULT_SCHEMA=doc
 ```
 
 
@@ -50,7 +57,7 @@ const client = new CrateDBClient({
   password: 'secretpassword!!',
   host: 'my.database-server.com',
   port: 5334,
-  database: 'database-name',
+  defaultSchema: 'my_schema',
   keepAlive: true, // Enable persistent connections
   maxSockets: 10  // Limit to 10 concurrent sockets
 });
@@ -63,6 +70,7 @@ const client = new CrateDBClient({
 Execute a raw SQL query.
 
 ```js
+await client.executeSql('SELECT * FROM my_table';);
 await client.executeSql('SELECT * FROM my_table', []);
 ```
 
@@ -110,6 +118,23 @@ await client.createTable({
     created_at: 'TIMESTAMP'
   }
 });
+```
+
+### Cursor Operations
+
+#### createCursor(sql)
+
+Create a cursor to fetch large datasets efficiently.
+
+```js
+const cursor = client.createCursor('SELECT * FROM my_table ORDER BY id');
+await cursor.open();
+
+console.log(await cursor.fetchone()); // Fetch one record
+console.log(await cursor.fetchmany(5)); // Fetch 5 records
+console.log(await cursor.fetchall()); // Fetch all remaining records
+
+await cursor.close(); // Close the cursor and commit the transaction
 ```
 
 ### Connection Management
