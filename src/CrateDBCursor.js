@@ -1,17 +1,22 @@
 'use strict';
 
+import http from 'http';
+import https from 'https';
+
 export class CrateDBCursor {
   constructor(client, sql) {
     this.client = client; // Reference to the CrateDBClient instance
     this.sql = sql; // The SQL statement for the cursor
     this.cursorName = `cursor_${Date.now()}`; // Unique cursor name
     this.isOpen = false; // Cursor state
+
+    const agentOptions = {
+      keepAlive: true,
+      maxSockets: 1
+    };
     
     // Create a new agent with its own socket for this cursor
-    this.agent = new client.httpAgent.constructor({
-        keepAlive: true,
-        maxSockets: 1,
-      });
+    this.agent = client.cfg.ssl ? new https.Agent(agentOptions) : new http.Agent(agentOptions);
   
     this.connectionOptions = { ...client.httpOptions, agent: this.agent };
   }
