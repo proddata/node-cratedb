@@ -90,27 +90,46 @@ for await (const row of client.streamQuery('SELECT * FROM my_table ORDER BY id',
 
 ### CRUD Operations
 
-#### insert(tableName, options)
+#### insert(tableName, obj, primaryKeys = null)
 
-Insert a new row into a specified table.
+Insert a new row into a specified table with optional primary key conflict resolution.
 
-```js
-await client.insert('my_table', { column1: 'value1', column2: 'value2' });
+- **`tableName`**: The name of the table to insert the row into.
+- **`obj`**: An object representing the row to insert.
+- **`primaryKeys`**: (Optional) An array of column names to use as primary keys for conflict resolution.
+
+If `primaryKeys` are provided, the method will handle conflicts by updating the non-primary key fields of conflicting rows. If no `primaryKeys` are provided, conflicting rows will be skipped.
+
+```javascript
+// Insert a row with primary key conflict resolution
+await client.insert("my_table", { id: 1, column1: "value1", column2: "value2" }, ["id"]);
+
+// Insert a row without conflict resolution
+await client.insert("my_table", { id: 1, column1: "value1", column2: "value2" });
 ```
 
-#### bulkInsert(tableName, jsonArray)
+#### insertMany(tableName, jsonArray, primaryKeys = null)
 
-Insert multiple rows into a table using bulk operations.
+Insert multiple rows into a table with optional primary key conflict resolution.
 
-```js
+- **`tableName`**: The name of the table to insert rows into.
+- **`jsonArray`**: An array of objects representing rows to insert.
+- **`primaryKeys`**: (Optional) An array of column names to use as primary keys for conflict resolution.
+
+If `primaryKeys` are provided, the method will handle conflicts by updating the non-primary key fields of conflicting rows. If no `primaryKeys` are provided, conflicting rows will be skipped.
+
+```javascript
 const bulkData = [
-  { id: 1, name: 'Earth', kind: 'Planet', description: 'A beautiful place.' },
-  { id: 2, name: 'Mars', kind: 'Planet', description: 'The red planet.' },
-  { id: 3, name: 'Sun', kind: 'Star', description: 'A hot and fiery place.' },
+  { id: 1, name: "Earth", kind: "Planet", description: "A beautiful place." },
+  { id: 2, name: "Mars", kind: "Planet", description: "The red planet." },
+  { id: 1, name: "Earth Updated", kind: "Planet", description: "Updated description." }, // Conflict on id
 ];
 
-const rowCounts = await client.bulkInsert('my_table', bulkData);
-console.log('Row counts:', rowCounts);
+await client.insertMany("my_table", bulkData, ["id"]);
+// Conflicting row with `id: 1` will be updated instead of skipped.
+
+await client.insertMany("my_table", bulkData);
+// Conflicting rows will be skipped as no `primaryKeys` are provided.
 ```
 
 #### update(tableName, options, whereClause)
