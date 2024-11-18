@@ -40,7 +40,9 @@ class CrateDBClient {
       scheduling: 'fifo',
     };
 
+    this.cfg = cfg;
     this.httpAgent = cfg.ssl ? new https.Agent(agentOptions) : new http.Agent(agentOptions);
+    this.protocol = cfg.ssl ? 'https' : 'http';
 
     this.httpOptions = {
       hostname: cfg.host,
@@ -60,8 +62,6 @@ class CrateDBClient {
       agent: this.httpAgent
     };
 
-    this.protocol = cfg.ssl ? 'https' : 'http';
-
   }
 
   createCursor(sql) {
@@ -79,21 +79,63 @@ class CrateDBClient {
     }
   }
 
-  async executeSql(sql, args = []) {
-    const options = { ...this.httpOptions, body: JSON.stringify({ stmt: sql, args }) };
+  async execute(stmt, args = []) {
+    const options = { ...this.httpOptions, body: JSON.stringify({ stmt, args }) };
     const response = await this._makeRequest(options, this.protocol);
     return JSON.parse(response);
   }
 
-  async insert(tableName, options) {
-    const { keys, values, args } = this._prepareOptions(options);
-    const query = `INSERT INTO ${tableName} (${keys}) VALUES (${values})`;
-    return await this.executeSql(query, args);
+  async executeMany(stmt, bulk_args = []) {
+    const options = { ...this.httpOptions, body: JSON.stringify({ stmt, bulk_args }) };
+    const response = await this._makeRequest(options, this.protocol);
+    return JSON.parse(response);
   }
 
-  async bulkInsert(tableName, jsonArray) {
+  // Convenience methods for common SQL operations
+
+  async insert(tableName, obj, primaryKeys = null) {
+    // Validate inputs
+    if (!tableName || typeof tableName !== "string") {
+      throw new Error("tableName must be a valid string");
+    }
+    if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
+      throw new Error("obj must be a valid non-array object");
+    }
+    if (primaryKeys && !Array.isArray(primaryKeys)) {
+      throw new Error("primaryKeys must be an array or null");
+    }
+  
+    const keys = Object.keys(obj).map((key) => `"${key}"`);
+    const values = keys.map(() => "?");
+    const args = Object.values(obj);
+  
+    let query = `INSERT INTO ${tableName} (${keys.join(", ")}) VALUES (${values.join(", ")})`;
+  
+    if (primaryKeys && primaryKeys.length > 0) {
+      const quotedPrimaryKeys = primaryKeys.map((key) => `"${key}"`);
+      const keysWithoutPrimary = keys.filter((key) => !quotedPrimaryKeys.includes(key));
+      const updates = keysWithoutPrimary.map((key) => `${key} = excluded.${key}`).join(", ");
+      query += ` ON CONFLICT (${primaryKeys.map((key) => `"${key}"`).join(", ")}) DO UPDATE SET ${updates}`;
+    } else {
+      query += " ON CONFLICT DO NOTHING";
+    }
+  
+    query += ";"; // Ensure query ends with a semicolon
+  
+    // Execute the query
+    return await this.execute(query, args);
+  }
+
+  async insertMany(tableName, jsonArray, primaryKeys = null) {
+    // Validate inputs
+    if (!tableName || typeof tableName !== "string") {
+      throw new Error("tableName must be a valid string.");
+    }
     if (!Array.isArray(jsonArray) || jsonArray.length === 0) {
-      throw new Error('bulkInsert requires a non-empty array of objects.');
+      throw new Error("insertMany requires a non-empty array of objects.");
+    }
+    if (primaryKeys && !Array.isArray(primaryKeys)) {
+      throw new Error("primaryKeys must be an array or null.");
     }
   
     // Extract unique keys from all objects
@@ -104,45 +146,51 @@ class CrateDBClient {
       }, new Set())
     );
   
-    // Transform JSON array into the bulk_args format
+    // Generate bulk arguments
     const bulkArgs = jsonArray.map((obj) =>
       uniqueKeys.map((key) => (obj.hasOwnProperty(key) ? obj[key] : null))
     );
   
-    const placeholders = uniqueKeys.map(() => '?').join(', ');
-    const stmt = `INSERT INTO ${tableName} (${uniqueKeys.join(', ')}) VALUES (${placeholders})`;
+    const placeholders = uniqueKeys.map(() => "?").join(", ");
+    let query = `INSERT INTO ${tableName} (${uniqueKeys.map((key) => `"${key}"`).join(", ")}) VALUES (${placeholders})`;
   
-    const options = {
-      ...this.httpOptions,
-      body: JSON.stringify({ stmt, bulk_args: bulkArgs }),
-    };
+    if (primaryKeys && primaryKeys.length > 0) {
+      // Handle upsert logic with conflict resolution
+      const quotedPrimaryKeys = primaryKeys.map((key) => `"${key}"`);
+      const keysWithoutPrimary = uniqueKeys.filter((key) => !primaryKeys.includes(key));
+      const updates = keysWithoutPrimary.map((key) => `"${key}" = excluded."${key}"`).join(", ");
+      query += ` ON CONFLICT (${quotedPrimaryKeys.join(", ")}) DO UPDATE SET ${updates}`;
+    } else {
+      // Skip rows that cause conflicts
+      query += " ON CONFLICT DO NOTHING";
+    }
   
-    const response = await this._makeRequest(options);
-    const parsedResponse = JSON.parse(response);
+    query += ";"; // Ensure the query ends with a semicolon
   
-    return parsedResponse.results.map((result) => result.rowcount);
+    // Execute the query with bulk arguments
+    return await this.executeMany(query, bulkArgs);
   }
 
   async update(tableName, options, whereClause) {
     const { keys, values, args } = this._prepareOptions(options);
     const setClause = keys.map((key, i) => `${key}=${values[i]}`).join(', ');
     const query = `UPDATE ${tableName} SET ${setClause} WHERE ${whereClause}`;
-    return await this.executeSql(query, args);
+    return await this.execute(query, args);
   }
 
   async delete(tableName, whereClause) {
     const query = `DELETE FROM ${tableName} WHERE ${whereClause}`;
-    return await this.executeSql(query);
+    return await this.execute(query);
   }
 
   async drop(tableName) {
-    const query = `DROP TABLE ${tableName}`;
-    return await this.executeSql(query);
+    const query = `DROP TABLE IF EXISTS ${tableName}`;
+    return await this.execute(query);
   }
 
   async refresh(tableName) {
     const query = `REFRESH TABLE ${tableName}`;
-    return await this.executeSql(query);
+    return await this.execute(query);
   }
 
   async createTable(schema) {
@@ -151,7 +199,7 @@ class CrateDBClient {
       .map(([col, type]) => `"${col}" ${type}`)
       .join(', ');
     const query = `CREATE TABLE ${tableName} (${columns})`;
-    return await this.executeSql(query);
+    return await this.execute(query);
   }
 
   _prepareOptions(options) {

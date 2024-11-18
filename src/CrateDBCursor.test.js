@@ -9,7 +9,7 @@ describe("CrateDBCursor", () => {
   const waitForDatabase = async (client, retries = 20, interval = 1000) => {
     for (let i = 0; i < retries; i++) {
       try {
-        await client.executeSql("SELECT 1");
+        await client.execute("SELECT 1");
         return;
       } catch {
         await new Promise((resolve) => setTimeout(resolve, interval));
@@ -85,7 +85,7 @@ describe("CrateDBCursor", () => {
       expect(noMoreRowsAll).toBeNull();
     } finally {
       await cursor.close();
-      await client.executeSql(`DROP TABLE ${tableName}`);
+      await client.execute(`DROP TABLE ${tableName}`);
     }
   });
 
@@ -110,7 +110,7 @@ describe("CrateDBCursor", () => {
       { id: 6, name: "Frank", value: "Test 6" },
     ];
 
-    await client.bulkInsert(tableName, testData);
+    await client.insertMany(tableName, testData);
     await client.refresh(tableName);
 
     // Use cursor to iterate over rows
