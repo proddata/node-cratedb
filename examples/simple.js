@@ -20,8 +20,7 @@ import { CrateDBClient } from '../src/CrateDBClient.js';
         description: 'TEXT',
       },
     });
-
-    console.log('Table created.');
+    console.log('Table "locations" created.');
 
     // --- Example 2: Inserting Data ---
     console.log('Inserting a record...');
@@ -31,16 +30,15 @@ import { CrateDBClient } from '../src/CrateDBClient.js';
       kind: 'Planet',
       description: 'An awesome place to live.',
     });
-
-    console.log('Record inserted.');
+    console.log('Record inserted into "locations".');
 
     // Refresh the table to make inserted data available for querying
     await client.refresh('locations');
 
     // --- Example 3: Querying Data ---
     console.log('Querying data...');
-    const result = await client.executeSql('SELECT * FROM locations ORDER BY id');
-    console.log('Query result:', result.rows);
+    const result = await client.execute('SELECT * FROM locations ORDER BY id');
+    console.log('Query results:', result.rows);
 
     // --- Example 4: Bulk Insert ---
     console.log('Performing a bulk insert...');
@@ -50,8 +48,8 @@ import { CrateDBClient } from '../src/CrateDBClient.js';
       { id: 4, kind: 'Asteroid', description: 'Rocky and small.' }, // Missing name
     ];
 
-    const bulkResult = await client.bulkInsert('locations', bulkData);
-    console.log('Bulk insert row counts:', bulkResult);
+    const bulkInsertResult = await client.insertMany('locations', bulkData, ['id']);
+    console.log('Bulk insert completed. Results:', bulkInsertResult);
 
     await client.refresh('locations');
 
@@ -60,9 +58,9 @@ import { CrateDBClient } from '../src/CrateDBClient.js';
     const cursor = client.createCursor('SELECT * FROM locations ORDER BY id');
     await cursor.open();
 
-    console.log(await cursor.fetchone()); // Fetch one record
-    console.log(await cursor.fetchmany(2)); // Fetch 2 records
-    console.log(await cursor.fetchall()); // Fetch all remaining records
+    console.log('First record:', await cursor.fetchone()); // Fetch one record
+    console.log('Next two records:', await cursor.fetchmany(2)); // Fetch 2 records
+    console.log('All remaining records:', await cursor.fetchall()); // Fetch all remaining records
 
     await cursor.close(); // Close the cursor and commit the transaction
 
@@ -71,7 +69,7 @@ import { CrateDBClient } from '../src/CrateDBClient.js';
     await client.update('locations', { description: 'Blue and beautiful.' }, 'id = 1');
     await client.refresh('locations');
 
-    const updatedResult = await client.executeSql('SELECT * FROM locations WHERE id = 1');
+    const updatedResult = await client.execute('SELECT * FROM locations WHERE id = 1');
     console.log('Updated record:', updatedResult.rows);
 
     // --- Example 7: Deleting Data ---
@@ -79,14 +77,14 @@ import { CrateDBClient } from '../src/CrateDBClient.js';
     await client.delete('locations', 'id = 4');
     await client.refresh('locations');
 
-    const remainingResult = await client.executeSql('SELECT * FROM locations');
+    const remainingResult = await client.execute('SELECT * FROM locations');
     console.log('Remaining records:', remainingResult.rows);
 
     // --- Example 8: Dropping the Table ---
     console.log('Dropping the table...');
     await client.drop('locations');
-    console.log('Table dropped.');
+    console.log('Table "locations" dropped.');
   } catch (error) {
-    console.error('Error during operations:', error.message);
+    console.error('Error during operations:', error);
   }
 })();
