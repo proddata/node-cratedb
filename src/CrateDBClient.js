@@ -93,6 +93,22 @@ class CrateDBClient {
 
   // Convenience methods for common SQL operations
 
+  _generateInsertQuery(tableName, keys, primaryKeys) {
+    const placeholders = keys.map(() => "?").join(", ");
+    let query = `INSERT INTO ${tableName} (${keys.map((key) => `"${key}"`).join(", ")}) VALUES (${placeholders})`;
+
+    if (primaryKeys && primaryKeys.length > 0) {
+      const keysWithoutPrimary = keys.filter((key) => !primaryKeys.includes(key));
+      const updates = keysWithoutPrimary.map((key) => `"${key}" = excluded."${key}"`).join(", ");
+      query += ` ON CONFLICT (${primaryKeys.map((key) => `"${key}"`).join(", ")}) DO UPDATE SET ${updates}`;
+    } else {
+      query += " ON CONFLICT DO NOTHING";
+    }
+
+    query += ";"; // Ensure the query ends with a semicolon
+    return query;
+  }
+
   async insert(tableName, obj, primaryKeys = null) {
     // Validate inputs
     if (!tableName || typeof tableName !== "string") {
@@ -104,24 +120,11 @@ class CrateDBClient {
     if (primaryKeys && !Array.isArray(primaryKeys)) {
       throw new Error("primaryKeys must be an array or null");
     }
-  
-    const keys = Object.keys(obj).map((key) => `"${key}"`);
-    const values = keys.map(() => "?");
+    
+    const keys = Object.keys(obj);
+    let query = this._generateInsertQuery(tableName, keys, primaryKeys);
     const args = Object.values(obj);
-  
-    let query = `INSERT INTO ${tableName} (${keys.join(", ")}) VALUES (${values.join(", ")})`;
-  
-    if (primaryKeys && primaryKeys.length > 0) {
-      const quotedPrimaryKeys = primaryKeys.map((key) => `"${key}"`);
-      const keysWithoutPrimary = keys.filter((key) => !quotedPrimaryKeys.includes(key));
-      const updates = keysWithoutPrimary.map((key) => `${key} = excluded.${key}`).join(", ");
-      query += ` ON CONFLICT (${primaryKeys.map((key) => `"${key}"`).join(", ")}) DO UPDATE SET ${updates}`;
-    } else {
-      query += " ON CONFLICT DO NOTHING";
-    }
-  
-    query += ";"; // Ensure query ends with a semicolon
-  
+
     // Execute the query
     return await this.execute(query, args);
   }
@@ -150,22 +153,8 @@ class CrateDBClient {
     const bulkArgs = jsonArray.map((obj) =>
       uniqueKeys.map((key) => (obj.hasOwnProperty(key) ? obj[key] : null))
     );
-  
-    const placeholders = uniqueKeys.map(() => "?").join(", ");
-    let query = `INSERT INTO ${tableName} (${uniqueKeys.map((key) => `"${key}"`).join(", ")}) VALUES (${placeholders})`;
-  
-    if (primaryKeys && primaryKeys.length > 0) {
-      // Handle upsert logic with conflict resolution
-      const quotedPrimaryKeys = primaryKeys.map((key) => `"${key}"`);
-      const keysWithoutPrimary = uniqueKeys.filter((key) => !primaryKeys.includes(key));
-      const updates = keysWithoutPrimary.map((key) => `"${key}" = excluded."${key}"`).join(", ");
-      query += ` ON CONFLICT (${quotedPrimaryKeys.join(", ")}) DO UPDATE SET ${updates}`;
-    } else {
-      // Skip rows that cause conflicts
-      query += " ON CONFLICT DO NOTHING";
-    }
-  
-    query += ";"; // Ensure the query ends with a semicolon
+
+    let query = this._generateInsertQuery(tableName, uniqueKeys, primaryKeys);
   
     // Execute the query with bulk arguments
     return await this.executeMany(query, bulkArgs);
