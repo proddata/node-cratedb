@@ -80,15 +80,28 @@ class CrateDBClient {
   }
 
   async execute(stmt, args = []) {
-    const options = { ...this.httpOptions, body: JSON.stringify({ stmt, args }) };
-    const response = await this._makeRequest(options, this.protocol);
-    return JSON.parse(response);
+    return this._execute(stmt, args);
   }
 
   async executeMany(stmt, bulk_args = []) {
-    const options = { ...this.httpOptions, body: JSON.stringify({ stmt, bulk_args }) };
+    return this._execute(stmt, null, bulk_args);
+  }
+
+  async _execute(stmt, args = null, bulk_args = null) {
+    const startRequestTime = Date.now();
+  
+    const body = JSON.stringify(args ? { stmt, args } : { stmt, bulk_args });
+
+    const options = { ...this.httpOptions, body };
     const response = await this._makeRequest(options, this.protocol);
-    return JSON.parse(response);
+  
+    const totalRequestTime = Date.now() - startRequestTime;
+    response.durations = {
+      cratedb: response.duration,
+      request: totalRequestTime - response.duration,
+    };
+  
+    return response;
   }
 
   // Convenience methods for common SQL operations
@@ -130,6 +143,7 @@ class CrateDBClient {
   }
 
   async insertMany(tableName, jsonArray, primaryKeys = null) {
+    const startInsertMany = Date.now();
     // Validate inputs
     if (!tableName || typeof tableName !== "string") {
       throw new Error("tableName must be a valid string.");
@@ -154,10 +168,14 @@ class CrateDBClient {
       uniqueKeys.map((key) => (obj.hasOwnProperty(key) ? obj[key] : null))
     );
 
-    let query = this._generateInsertQuery(tableName, uniqueKeys, primaryKeys);
+    const query = this._generateInsertQuery(tableName, uniqueKeys, primaryKeys);
   
     // Execute the query with bulk arguments
-    return await this.executeMany(query, bulkArgs);
+    const response = await this.executeMany(query, bulkArgs);
+    const elapsedTime = Date.now() - startInsertMany;
+    response.durations.preparation = elapsedTime - response.durations.request - response.durations.cratedb;
+
+    return response;
   }
 
   async update(tableName, options, whereClause) {
@@ -200,12 +218,19 @@ class CrateDBClient {
 
   async _makeRequest(options) {
     return new Promise((resolve, reject) => {
+      const requestBodySize = options.body ? Buffer.byteLength(options.body) : 0;
       const req = (this.protocol === 'https' ? https : http).request(options, (response) => {
         let data = [];
         response.on('data', (chunk) => data.push(chunk));
-        response.on('end', () => resolve(Buffer.concat(data).toString()));
+        response.on('end', () => {
+          const rawResponse = Buffer.concat(data); // Raw response data as a buffer
+          const responseBodySize = rawResponse.length;
+          resolve({
+            ...(JSON.parse(rawResponse.toString())),
+            sizes: {response: responseBodySize, request: requestBodySize}
+          });
+        });
       });
-
       req.on('error', (err) => reject(new Error(`Request failed: ${err.message}`)));
       req.end(options.body || null);
     });

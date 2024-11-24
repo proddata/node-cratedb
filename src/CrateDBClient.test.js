@@ -49,15 +49,40 @@ describe("CrateDBClient", () => {
     }
   });
 
-  it("should return error for invalid SQL", async () => {
+  it("should execute a basic SELECT query and include durations", async () => {
+    // Execute a simple query
+    const response = await client.execute("SELECT 1");
+  
+    // Validate the response structure
+    expect(response.rows).toEqual([[1]]);
+    expect(response.cols).toEqual(["1"]);
+  
+    // Check if durations exist
+    expect(response.durations).toBeDefined();
+    expect(response.durations.request).toBeDefined();
+    expect(response.durations.cratedb).toBeDefined();
+
+    // Check if sizes exist
+    expect(response.sizes).toBeDefined();
+    expect(response.sizes.request).toBeGreaterThan(0);
+    expect(response.sizes.response).toBeGreaterThan(0);
+  });
+
+  it("should return an error for invalid SQL queries", async () => {
     try {
       await client.execute("SELECT * FROM invalid_table");
     } catch (error) {
       expect(error.message).toContain("Table 'invalid_table' unknown");
+      if (error.response && error.response.durations) {
+        // Check if durations object exists in the error response
+        expect(error.response.durations).toBeDefined();
+        expect(error.response.durations.request).toBeDefined();
+        expect(error.response.durations.cratedb).toBeDefined();
+      }
     }
   });
 
-  it("should create a table, insert data with upsert, and verify no update without conflict keys", async () => {
+  it("should handle upsert conflicts correctly when inserting data", async () => {
     // Define the table name as a variable
     const tableName = "my_schema.insert_test";
   
@@ -91,7 +116,7 @@ describe("CrateDBClient", () => {
     await client.drop(tableName);
   });
 
-  it("should create a table, insert bulk data, and query it", async () => {
+  it("should insert and query bulk data", async () => {
     const tableName = "my_schema.bulk_insert_tets";
     await client.createTable({
       [tableName]: {
@@ -109,6 +134,14 @@ describe("CrateDBClient", () => {
     const insertManyResult = await client.executeMany(insert_statement, insert_bulk_args);
     expect(insertManyResult.results.length).toEqual(insert_bulk_args.length);
 
+      // Check if the durations object exists
+    expect(insertManyResult.durations).toBeDefined();
+    expect(insertManyResult.durations.request).toBeDefined();
+    expect(insertManyResult.durations.cratedb).toBeDefined();
+
+    // Validate the number of results matches the bulk args
+    expect(insertManyResult.results.length).toEqual(insert_bulk_args.length);
+
     // Refresh the table to make the data queryable
     await client.refresh(tableName);
 
@@ -119,7 +152,7 @@ describe("CrateDBClient", () => {
     await client.drop(tableName);
   });
 
-  it("should handle primary key conflicts in insertMany", async () => {
+  it("should handle primary key conflicts during bulk insert", async () => {
     const tableName = "my_schema.primary_key_test";
   
     await client.createTable({
@@ -160,7 +193,7 @@ describe("CrateDBClient", () => {
     await client.drop(tableName);
   });
 
-  it("should not update rows when primaryKeys is not provided in insertMany", async () => {
+  it("should ignore updates when primary keys are not provided in bulk insert", async () => {
     const tableName = "my_schema.no_primary_key_test";
   
     await client.createTable({
@@ -200,12 +233,12 @@ describe("CrateDBClient", () => {
     await client.drop(tableName);
   });
 
-  it("should validate sys.summits table with a separate connection", async () => {
+  it("should validate the sys.summits table with a separate connection", async () => {
     const result = await systemClient.execute("SELECT COUNT(*) FROM sys.summits");
     expect(result.rows[0][0]).toBeGreaterThanOrEqual(0);
   });
 
-  it("should perform a bulk insert and validate data", async () => {
+  it("should perform and validate a bulk insert", async () => {
     const tableName = "my_schema.bulk_table";
 
     await client.createTable({
@@ -242,7 +275,7 @@ describe("CrateDBClient", () => {
     await client.execute(`DROP TABLE ${tableName}`);
   });
 
-  it("should stream results using streamQuery()", async () => {
+  it("should stream query results and validate them", async () => {
     const tableName = "stream_test_table";
 
     // Create the table and insert test data

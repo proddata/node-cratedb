@@ -83,7 +83,7 @@ export class CrateDBCursor {
     const options = { ...this.connectionOptions, body: JSON.stringify({ stmt: sql }) };
     try {
       const response = await this.client._makeRequest(options, this.client.protocol);
-      const { cols, rows, rowcount } = JSON.parse(response);
+      const { cols, rows, rowcount } = response;
       return rowcount > 0 ? this._rebuildObjects(cols, rows) : null;
     } catch (error) {
       throw new Error(`Error executing SQL: ${sql}. Details: ${error.message}`);
