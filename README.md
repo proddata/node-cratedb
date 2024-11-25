@@ -9,11 +9,45 @@ This library is a lightweight Node.js client derived from `node-crate` for inter
 > For production use, consider mature libraries like [`node-postgres`](https://node-postgres.com/) which leverage CrateDB's PostgreSQL compatibility. Use this client only for **testing, experimentation**, or if you know what you're doing. :wink:
 
 
-## Configuration
+## Installation
+
+To install `node-cratedb` using npm:
+
+```bash
+npm install @proddata/node-cratedb
+```
+
+> [!NOTE]
+> This is a modern ES6 module, so you can import it using `import` statements.
+
+To use the `CrateDBClient`:
+
+1. Import the `CrateDBClient` class.
+2. Instantiate it with your configuration options.
+3. Call any of the CRUD and DDL methods provided.
+
+```javascript
+import { CrateDBClient } from '@proddata/node-cratedb';
+
+const client = new CrateDBClient({
+  user: 'database-user',
+  password: 'secretpassword!!',
+  host: 'my.database-server.com',
+  port: 4200,
+  ssl: true,             // Use HTTPS
+  keepAlive: true,       // Enable persistent connections
+  maxConnections: 20,         // Limit to 10 concurrent sockets
+  defaultSchema: 'my_schema' // Default schema for queries
+});
+```
+
+
+
+### Configuration
 
 The `CrateDBClient` can be configured with either environment variables or directly with an options object. Below are the configuration options, along with their default values.
 
-### Configuration Options
+#### Configuration Options
 
 | Option             | Type                | Default Value                                   | Description                                                     |
 |--------------------|---------------------|-------------------------------------------------|-----------------------------------------------------------------|
@@ -27,7 +61,7 @@ The `CrateDBClient` can be configured with either environment variables or direc
 | `keepAlive`        | `boolean`           | `true`                                          | Enables HTTP keep-alive for persistent connections.             |
 | `maxConnections`   | `number`            | `20`                                      | Limits the maximum number of concurrent connections.            |
 
-### Environment Variables
+#### Environment Variables
 
 Alternatively, you can set these variables in your environment:
 
@@ -39,43 +73,33 @@ export CRATEDB_PORT=4200
 export CRATEDB_DEFAULT_SCHEMA=doc
 ```
 
+---
 
 ## Usage
 
-To use the `CrateDBClient`:
-
-1. Import the `CrateDBClient` class.
-2. Instantiate it with your configuration options.
-3. Call any of the CRUD and DDL methods provided.
-
-```javascript
-import { CrateDBClient } from './CrateDBClient.js';
-
-const client = new CrateDBClient({
-  user: 'database-user',
-  password: 'secretpassword!!',
-  host: 'my.database-server.com',
-  port: 5334,
-  defaultSchema: 'my_schema',
-  keepAlive: true, // Enable persistent connections
-  maxConnections: 20  // Limit to 20 concurrent sockets
-});
-```
-
 ### General Operations
 
-#### executeSql(sql, args)
+#### execute(sql, args)
 
 Execute a raw SQL query.
 
 ```js
 await client.executeSql('SELECT * FROM my_table';);
-await client.executeSql('SELECT * FROM my_table', []);
+await client.executeSql('SELECT ?;', ['Hello World!']);
 ```
+
+#### executeMany(sql, bulk_args)
+
+Execute a raw bulk SQL query.
+
+```js
+await client.executeSql('SELECT * FROM my_table', [['Hello'],['World']]);
+```
+
 
 #### streamQuery(sql, batchSize)
 
-The `streamQuery` method in CrateDBClient wraps the CrateDBCursor functionality
+The `streamQuery` method in CrateDBClient wraps the Cursor functionality
 for convenient query streaming. This method automatically manages the cursor’s
 lifecycle.
 
@@ -156,6 +180,15 @@ Drop a specified table.
 await client.drop('my_table');
 ```
 
+#### refresh(tableName)
+
+Refresh a specified table.
+
+```js
+await client.refresh('my_table');
+```
+
+
 #### createTable(schema)
 
 Create a new table based on a schema definition.
@@ -203,23 +236,6 @@ for await (const row of cursor.iterate(5)) {
 await cursor.close();
 ```
 
-### Connection Management
-
-Configure keepAlive for persistent connections and maxConnections to limit
-concurrent connections.
-
-```js
-const client = new CrateDBClient({
-  user: 'database-user',
-  password: 'secretpassword!!',
-  host: 'my.database-server.com',
-  port: 4200,
-  ssl: true,             // Use HTTPS
-  keepAlive: true,       // Enable persistent connections
-  maxConnections: 20,         // Limit to 10 concurrent sockets
-  defaultSchema: 'my_schema' // Default schema for queries
-});
-```
 
 ## License
 
