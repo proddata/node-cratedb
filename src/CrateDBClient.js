@@ -9,6 +9,7 @@ import { CrateDBCursor } from './CrateDBCursor.js';
 const defaultConfig = {
   user: process.env.CRATEDB_USER || 'crate',
   password: process.env.CRATEDB_PASSWORD || '',
+  jwt: null, // JWT token for Bearer authentication
   host: process.env.CRATEDB_HOST || 'localhost',
   port: process.env.CRATEDB_PORT ? parseInt(process.env.CRATEDB_PORT, 10) : 4200, // Default CrateDB port
   defaultSchema: process.env.CRATEDB_HOST || 'doc', // Default schema for queries
@@ -44,6 +45,14 @@ class CrateDBClient {
     this.httpAgent = cfg.ssl ? new https.Agent(agentOptions) : new http.Agent(agentOptions);
     this.protocol = cfg.ssl ? 'https' : 'http';
 
+    // Determine authentication header: use JWT if available, else basic auth
+    let authHeader = {};
+    if (cfg.jwt) {
+      authHeader = { Authorization: `Bearer ${cfg.jwt}` };
+    } else if (cfg.user && cfg.password) {
+      authHeader = { Authorization: `Basic ${Buffer.from(`${cfg.user}:${cfg.password}`).toString('base64')}` };
+    }
+
     this.httpOptions = {
       hostname: cfg.host,
       port: cfg.port,
@@ -53,12 +62,10 @@ class CrateDBClient {
         'Connection': 'keep-alive',
         'Content-Type': 'application/json',
         'Accept': 'application/json',
-        ...(cfg.user && cfg.password
-          ? { Authorization: `Basic ${Buffer.from(`${cfg.user}:${cfg.password}`).toString('base64')}` }
-          : {}),
+        ...authHeader,
         ...(cfg.defaultSchema ? { 'Default-Schema': cfg.defaultSchema } : {}),
       },
-      auth: cfg.user && cfg.password ? `${cfg.user}:${cfg.password}` : undefined,
+      auth: cfg.jwt ? undefined : (cfg.user && cfg.password ? `${cfg.user}:${cfg.password}` : undefined),
       agent: this.httpAgent
     };
 
@@ -80,11 +87,19 @@ class CrateDBClient {
   }
 
   async execute(stmt, args = []) {
-    return this._execute(stmt, args);
+    return await this._execute(stmt, args);
   }
 
   async executeMany(stmt, bulk_args = []) {
-    return this._execute(stmt, null, bulk_args);
+    const res = await this._execute(stmt, null, bulk_args);
+    const bulk_errors = res.results
+    .map((result, i) => (result.rowcount === -2 ? i : null))
+    .filter(i => i !== null);
+
+    if (bulk_errors.length > 0) {
+      res.bulk_errors = bulk_errors;
+    }
+    return res;
   }
 
   async _execute(stmt, args = null, bulk_args = null) {
@@ -225,10 +240,15 @@ class CrateDBClient {
         response.on('end', () => {
           const rawResponse = Buffer.concat(data); // Raw response data as a buffer
           const responseBodySize = rawResponse.length;
-          resolve({
-            ...(JSON.parse(rawResponse.toString())),
-            sizes: {response: responseBodySize, request: requestBodySize}
-          });
+          try {
+            const parsedResponse = JSON.parse(rawResponse.toString());
+            resolve({
+              ...parsedResponse,
+              sizes: {response: responseBodySize, request: requestBodySize}
+            });
+          } catch (err) {
+            reject(new Error(`Failed to parse response: ${err.message}. Raw response: ${rawResponse.toString()}`));
+          }
         });
       });
       req.on('error', (err) => reject(new Error(`Request failed: ${err.message}`)));

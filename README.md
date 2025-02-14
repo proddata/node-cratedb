@@ -41,6 +41,21 @@ const client = new CrateDBClient({
 });
 ```
 
+You can also use JWT-based authentication. When a jwt is provided, it overrides the basic authentication credentials:
+
+```javascript
+import { CrateDBClient } from '@proddata/node-cratedb';
+
+const client = new CrateDBClient({
+  host: 'my.database-server.com',
+  port: 4200,
+  jwt: 'your.jwt.token.here',  // Use JWT for Bearer authentication
+  ssl: true,
+  keepAlive: true,
+  maxConnections: 20,
+  defaultSchema: 'my_schema'
+});
+```
 
 
 ### Configuration

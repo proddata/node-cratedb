@@ -49,6 +49,32 @@ describe("CrateDBClient", () => {
     }
   });
 
+  // New test to validate JWT configuration behavior
+  it("should prioritize JWT authentication over basic auth", async () => {
+    const jwt = "dummy.jwt.token";
+    const jwtClient = new CrateDBClient({
+      host: container.getHost(),
+      port: container.getMappedPort(4200),
+      user: "ignoredUser",
+      password: "ignoredPass",
+      jwt: jwt,
+    });
+
+    // Verify that the Authorization header is set to the JWT value
+    expect(jwtClient.httpOptions.headers.Authorization).toBe(`Bearer ${jwt}`);
+    // And that basic auth is not used
+    expect(jwtClient.httpOptions.auth).toBeUndefined();
+
+    // Optionally, attempt a query. This may fail if the server doesn't accept JWT,
+    // but the test mainly verifies configuration.
+    try {
+      await jwtClient.execute("SELECT 1");
+    } catch (error) {
+      // Depending on the server behavior, an auth error may be thrown.
+      expect(error.message).toContain("The input is not a valid base 64 encoded string.");
+    }
+  });
+
   it("should execute a basic SELECT query and include durations", async () => {
     // Execute a simple query
     const response = await client.execute("SELECT 1");
