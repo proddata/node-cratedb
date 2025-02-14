@@ -1,3 +1,6 @@
+[![npm version](https://img.shields.io/npm/v/@proddata/node-cratedb.svg)](https://www.npmjs.com/package/@proddata/node-cratedb)
+[![Build Status](https://github.com/proddata/node-cratedb/actions/workflows/test.yml/badge.svg)](https://github.com/proddata/node-cratedb/actions)
+
 # CrateDB HTTP API Client for Node.js
 
 This library is a lightweight Node.js client derived from `node-crate` for interacting with CrateDB via its **HTTP endpoint**. Unlike libraries such as `node-postgres`, which use the PostgreSQL wire protocol, this client communicates with CrateDB's native HTTP API.
