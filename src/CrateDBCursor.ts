@@ -3,10 +3,7 @@
 import http from 'http';
 import https from 'https';
 import { CrateDBClient } from './CrateDBClient.js';
-import {
-  CrateDBResponse,
-  CrateDBRecord,
-} from "./interfaces";
+import { CrateDBResponse, CrateDBRecord } from './interfaces';
 
 export class CrateDBCursor {
   public client: CrateDBClient;
@@ -24,53 +21,54 @@ export class CrateDBCursor {
 
     const agentOptions = {
       keepAlive: true,
-      maxSockets: 1
+      maxSockets: 1,
     };
-    
+
     // Create a new agent with its own socket for this cursor
     this.agent = client.cfg.ssl ? new https.Agent(agentOptions) : new http.Agent(agentOptions);
     this.connectionOptions = { ...client.httpOptions, agent: this.agent };
   }
 
-  async open(): Promise<void>{
+  async open(): Promise<void> {
     if (this.isOpen) {
       throw new Error('Cursor is already open');
     }
     // Start a transaction and declare the cursor
     await this._execute('BEGIN');
-    await this._execute(`DECLARE ${this.cursorName} NO SCROLL CURSOR FOR ${this.sql}`);
+    await this._execute(`DECLARE ${this.cursorName} NO SCROLL CURSOR WITH HOLD FOR ${this.sql}`);
     this.isOpen = true;
   }
 
-  async fetchone(): Promise<CrateDBRecord|null> {
+  async fetchone(): Promise<CrateDBRecord | null> {
     this._ensureOpen();
     const result = await this._execute(`FETCH NEXT FROM ${this.cursorName}`);
     return result.length > 0 ? result[0] : null; // Return the first row or null
   }
 
   async fetchmany(size = 10): Promise<Array<CrateDBRecord>> {
-    if(size < 1) {  // Return an empty array if size is less than 1
+    if (size < 1) {
+      // Return an empty array if size is less than 1
       return [];
     }
     this._ensureOpen();
     return await this._execute(`FETCH ${size} FROM ${this.cursorName}`);
   }
 
-  async fetchall(): Promise<Array<CrateDBRecord>>{
+  async fetchall(): Promise<Array<CrateDBRecord>> {
     this._ensureOpen();
     return await this._execute(`FETCH ALL FROM ${this.cursorName}`);
   }
 
   async *iterate(size = 100): AsyncGenerator<CrateDBRecord, void, unknown> {
     this._ensureOpen();
-  
+
     while (true) {
       const rows = await this.fetchmany(size);
-  
+
       if (!rows || rows.length === 0) {
         break; // Stop iteration when no more rows are returned
       }
-  
+
       for (const row of rows) {
         yield row; // Yield one row at a time
       }
@@ -87,7 +85,7 @@ export class CrateDBCursor {
     this.agent.destroy();
   }
 
-  async _execute(sql:string): Promise<Array<CrateDBRecord>> {
+  async _execute(sql: string): Promise<Array<CrateDBRecord>> {
     const options = { ...this.connectionOptions, body: JSON.stringify({ stmt: sql }) };
     try {
       const response: CrateDBResponse = await this.client._makeRequest(options);

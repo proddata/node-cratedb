@@ -8,9 +8,12 @@
   "scripts": {
     "build": "tsc",
     "prepare": "npm run build",
+    "format": "prettier --write 'src/**/*.{ts,tsx,js,jsx}'",
+    "check-format": "prettier --check 'src/**/*.{ts,tsx,js,jsx}'",
     "lint": "eslint 'src/**/*.{ts,tsx}' 'tests/**/*.{ts,tsx}'",
     "test": "vitest",
-    "test:watch": "vitest --watch"
+    "test:watch": "vitest --watch",
+    "ci": "npm run check-format && npm run lint && npm test && npm run build"
   },
   "repository": {
     "type": "git",
@@ -37,6 +40,8 @@
     "@typescript-eslint/eslint-plugin": "^8.24.0",
     "@typescript-eslint/parser": "^8.24.0",
     "eslint": "^9.20.1",
+    "eslint-config-prettier": "^10.0.1",
+    "eslint-plugin-prettier": "^5.2.3",
     "globals": "^15.15.0",
     "testcontainers": "^10.14.0",
     "typescript": "^5.7.3",

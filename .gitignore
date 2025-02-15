@@ -14,7 +14,7 @@ pids/
 *.pid.lock
 
 # Directory for debugging Node.js
-.vscode/
+.vscode/launch.json
 
 # OS generated files
 .DS_Store

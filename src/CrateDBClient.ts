@@ -10,7 +10,7 @@ import {
   CrateDBBulkResponse,
   CrateDBBulkRecord,
   CrateDBRecord,
-} from "./interfaces";
+} from './interfaces';
 
 // Configuration options with CrateDB-specific environment variables
 const defaultConfig: CrateDBConfig = {
@@ -62,7 +62,9 @@ export class CrateDBClient {
     if (cfg.jwt) {
       authHeader = { Authorization: `Bearer ${cfg.jwt}` };
     } else if (cfg.user && cfg.password) {
-      authHeader = { Authorization: `Basic ${Buffer.from(`${cfg.user}:${cfg.password}`).toString('base64')}` };
+      authHeader = {
+        Authorization: `Basic ${Buffer.from(`${cfg.user}:${cfg.password}`).toString('base64')}`,
+      };
     }
 
     this.httpOptions = {
@@ -71,16 +73,15 @@ export class CrateDBClient {
       path: '/_sql?types',
       method: 'POST',
       headers: {
-        'Connection': 'keep-alive',
+        Connection: 'keep-alive',
         'Content-Type': 'application/json',
-        'Accept': 'application/json',
+        Accept: 'application/json',
         ...authHeader,
         ...(cfg.defaultSchema ? { 'Default-Schema': cfg.defaultSchema } : {}),
       },
-      auth: cfg.jwt ? undefined : (cfg.user && cfg.password ? `${cfg.user}:${cfg.password}` : undefined),
-      agent: this.httpAgent
+      auth: cfg.jwt ? undefined : cfg.user && cfg.password ? `${cfg.user}:${cfg.password}` : undefined,
+      agent: this.httpAgent,
     };
-
   }
 
   createCursor(sql: string): CrateDBCursor {
@@ -89,7 +90,7 @@ export class CrateDBClient {
 
   async *streamQuery(sql: string, batchSize: number = 100): AsyncGenerator<CrateDBRecord, void, unknown> {
     const cursor = this.createCursor(sql);
-  
+
     try {
       await cursor.open();
       yield* cursor.iterate(batchSize);
@@ -105,9 +106,7 @@ export class CrateDBClient {
   async executeMany(stmt: string, bulk_args: unknown[][]): Promise<CrateDBBulkResponse> {
     const res: CrateDBBulkResponse = await this._execute(stmt, null, bulk_args);
     const results: Array<CrateDBBulkRecord> = res.results || [];
-    const bulk_errors = results
-      .map((result, i) => (result.rowcount === -2 ? i : null))
-      .filter((i) => i !== null);
+    const bulk_errors = results.map((result, i) => (result.rowcount === -2 ? i : null)).filter((i) => i !== null);
 
     if (bulk_errors.length > 0) {
       res.bulk_errors = bulk_errors;
@@ -115,13 +114,17 @@ export class CrateDBClient {
     return res;
   }
 
-  async _execute(stmt: string, args: unknown[] | null = null, bulk_args: unknown[][] | null = null): Promise<CrateDBBaseResponse> {
+  async _execute(
+    stmt: string,
+    args: unknown[] | null = null,
+    bulk_args: unknown[][] | null = null
+  ): Promise<CrateDBBaseResponse> {
     const startRequestTime = Date.now();
     const body = JSON.stringify(args ? { stmt, args } : { stmt, bulk_args });
     const options = { ...this.httpOptions, body };
     const response = await this._makeRequest(options);
     const totalRequestTime = Date.now() - startRequestTime;
-    if (typeof response.duration === "number") {
+    if (typeof response.duration === 'number') {
       response.durations = {
         cratedb: response.duration,
         request: totalRequestTime - response.duration,
@@ -137,33 +140,37 @@ export class CrateDBClient {
 
   // Convenience methods for common SQL operations
   _generateInsertQuery(tableName: string, keys: string[], primaryKeys: string[] | null): string {
-    const placeholders = keys.map(() => "?").join(", ");
-    let query = `INSERT INTO ${tableName} (${keys.map((key) => `"${key}"`).join(", ")}) VALUES (${placeholders})`;
+    const placeholders = keys.map(() => '?').join(', ');
+    let query = `INSERT INTO ${tableName} (${keys.map((key) => `"${key}"`).join(', ')}) VALUES (${placeholders})`;
 
     if (primaryKeys && primaryKeys.length > 0) {
       const keysWithoutPrimary = keys.filter((key) => !primaryKeys.includes(key));
-      const updates = keysWithoutPrimary.map((key) => `"${key}" = excluded."${key}"`).join(", ");
-      query += ` ON CONFLICT (${primaryKeys.map((key) => `"${key}"`).join(", ")}) DO UPDATE SET ${updates}`;
+      const updates = keysWithoutPrimary.map((key) => `"${key}" = excluded."${key}"`).join(', ');
+      query += ` ON CONFLICT (${primaryKeys.map((key) => `"${key}"`).join(', ')}) DO UPDATE SET ${updates}`;
     } else {
-      query += " ON CONFLICT DO NOTHING";
+      query += ' ON CONFLICT DO NOTHING';
     }
 
-    query += ";"; // Ensure the query ends with a semicolon
+    query += ';'; // Ensure the query ends with a semicolon
     return query;
   }
 
-  async insert(tableName: string, obj: Record<string,unknown>, primaryKeys: string[] | null = null): Promise<CrateDBResponse> {
+  async insert(
+    tableName: string,
+    obj: Record<string, unknown>,
+    primaryKeys: string[] | null = null
+  ): Promise<CrateDBResponse> {
     // Validate inputs
-    if (!tableName || typeof tableName !== "string") {
-      throw new Error("tableName must be a valid string");
+    if (!tableName || typeof tableName !== 'string') {
+      throw new Error('tableName must be a valid string');
     }
-    if (!obj || typeof obj !== "object" || Array.isArray(obj)) {
-      throw new Error("obj must be a valid non-array object");
+    if (!obj || typeof obj !== 'object' || Array.isArray(obj)) {
+      throw new Error('obj must be a valid non-array object');
     }
     if (primaryKeys && !Array.isArray(primaryKeys)) {
-      throw new Error("primaryKeys must be an array or null");
+      throw new Error('primaryKeys must be an array or null');
     }
-    
+
     const keys = Object.keys(obj);
     const query = this._generateInsertQuery(tableName, keys, primaryKeys);
     const args = Object.values(obj);
@@ -172,19 +179,23 @@ export class CrateDBClient {
     return await this.execute(query, args);
   }
 
-  async insertMany(tableName: string, jsonArray: Record<string, unknown>[], primaryKeys: string[] | null = null): Promise<CrateDBBulkResponse> {
+  async insertMany(
+    tableName: string,
+    jsonArray: Record<string, unknown>[],
+    primaryKeys: string[] | null = null
+  ): Promise<CrateDBBulkResponse> {
     const startInsertMany = Date.now();
     // Validate inputs
-    if (!tableName || typeof tableName !== "string") {
-      throw new Error("tableName must be a valid string.");
+    if (!tableName || typeof tableName !== 'string') {
+      throw new Error('tableName must be a valid string.');
     }
     if (!Array.isArray(jsonArray) || jsonArray.length === 0) {
-      throw new Error("insertMany requires a non-empty array of objects.");
+      throw new Error('insertMany requires a non-empty array of objects.');
     }
     if (primaryKeys && !Array.isArray(primaryKeys)) {
-      throw new Error("primaryKeys must be an array or null.");
+      throw new Error('primaryKeys must be an array or null.');
     }
-  
+
     // Extract unique keys from all objects
     const uniqueKeys = Array.from(
       jsonArray.reduce((keys: Set<string>, obj: Record<string, unknown>) => {
@@ -192,14 +203,14 @@ export class CrateDBClient {
         return keys;
       }, new Set<string>())
     );
-  
+
     // Generate bulk arguments
     const bulkArgs = jsonArray.map((obj) =>
       uniqueKeys.map((key) => (Object.prototype.hasOwnProperty.call(obj, key) ? obj[key] : null))
     );
 
     const query = this._generateInsertQuery(tableName, uniqueKeys, primaryKeys);
-  
+
     // Execute the query with bulk arguments
     const response = await this.executeMany(query, bulkArgs);
     const elapsedTime = Date.now() - startInsertMany;
@@ -239,8 +250,12 @@ export class CrateDBClient {
     return await this.execute(query);
   }
 
-  _prepareOptions(options: Record<string, unknown>): { keys: string[]; values: string[]; args: unknown[] } {
-    const keys = Object.keys(options).map(key => `"${key}"`);
+  _prepareOptions(options: Record<string, unknown>): {
+    keys: string[];
+    values: string[];
+    args: unknown[];
+  } {
+    const keys = Object.keys(options).map((key) => `"${key}"`);
     const values = keys.map(() => '?');
     const args = Object.values(options);
     return { keys, values, args };
@@ -259,16 +274,18 @@ export class CrateDBClient {
             const parsedResponse = JSON.parse(rawResponse.toString());
             resolve({
               ...parsedResponse,
-              sizes: {response: responseBodySize, request: requestBodySize}
+              sizes: { response: responseBodySize, request: requestBodySize },
             });
           } catch (parseErr: unknown) {
             if (response.statusCode === 401) {
-              reject(new Error("Authentication error: Invalid credentials or insufficient permissions."));
+              reject(new Error('Authentication error: Invalid credentials or insufficient permissions.'));
             } else if (response.statusCode === 503) {
-              reject(new Error("Service unavailable: server is not available (503)."));
+              reject(new Error('Service unavailable: server is not available (503).'));
             }
             if (parseErr instanceof Error) {
-              reject(new Error(`Failed to parse response: ${parseErr.message}. Raw response: ${rawResponse.toString()}`));
+              reject(
+                new Error(`Failed to parse response: ${parseErr.message}. Raw response: ${rawResponse.toString()}`)
+              );
             } else {
               reject(new Error(`Failed to parse response. Raw response: ${rawResponse.toString()}`));
             }
