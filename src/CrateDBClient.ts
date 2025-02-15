@@ -3,19 +3,14 @@ import http, { AgentOptions } from 'http';
 import https from 'https';
 import { URL } from 'url';
 import { CrateDBCursor } from './CrateDBCursor.js';
-
-interface CrateDBConfig {
-  user: string;
-  password: string;
-  jwt: string | null;
-  host: string;
-  port: number;
-  defaultSchema: string | null;
-  connectionString: string | null;
-  ssl: boolean;
-  keepAlive: boolean;
-  maxConnections: number;
-}
+import {
+  CrateDBConfig,
+  CrateDBBaseResponse,
+  CrateDBResponse,
+  CrateDBBulkResponse,
+  CrateDBBulkRecord,
+  CrateDBRecord,
+} from "./interfaces";
 
 // Configuration options with CrateDB-specific environment variables
 const defaultConfig: CrateDBConfig = {
@@ -92,7 +87,7 @@ export class CrateDBClient {
     return new CrateDBCursor(this, sql);
   }
 
-  async *streamQuery(sql: string, batchSize: number = 100): AsyncGenerator<any, void, unknown> {
+  async *streamQuery(sql: string, batchSize: number = 100): AsyncGenerator<CrateDBRecord, void, unknown> {
     const cursor = this.createCursor(sql);
   
     try {
@@ -103,33 +98,40 @@ export class CrateDBClient {
     }
   }
 
-  async execute(stmt: string, args: any[] = []): Promise<any> {
+  async execute(stmt: string, args: unknown[] = []): Promise<CrateDBResponse> {
     return await this._execute(stmt, args);
   }
 
-  async executeMany(stmt: string, bulk_args: any[][] = []): Promise<any> {
-    const res = await this._execute(stmt, null, bulk_args);
-    const results: any[] = (res as any).results || [];
+  async executeMany(stmt: string, bulk_args: unknown[][]): Promise<CrateDBBulkResponse> {
+    const res: CrateDBBulkResponse = await this._execute(stmt, null, bulk_args);
+    const results: Array<CrateDBBulkRecord> = res.results || [];
     const bulk_errors = results
       .map((result, i) => (result.rowcount === -2 ? i : null))
       .filter((i) => i !== null);
 
     if (bulk_errors.length > 0) {
-      (res as any).bulk_errors = bulk_errors;
+      res.bulk_errors = bulk_errors;
     }
     return res;
   }
 
-  async _execute(stmt: string, args: any[] | null = null, bulk_args: any[][] | null = null): Promise<any> {
+  async _execute(stmt: string, args: unknown[] | null = null, bulk_args: unknown[][] | null = null): Promise<CrateDBBaseResponse> {
     const startRequestTime = Date.now();
     const body = JSON.stringify(args ? { stmt, args } : { stmt, bulk_args });
     const options = { ...this.httpOptions, body };
     const response = await this._makeRequest(options);
     const totalRequestTime = Date.now() - startRequestTime;
-    (response as any).durations = {
-      cratedb: (response as any).duration,
-      request: totalRequestTime - (response as any).duration,
-    };
+    if (typeof response.duration === "number") {
+      response.durations = {
+        cratedb: response.duration,
+        request: totalRequestTime - response.duration,
+      };
+    } else {
+      response.durations = {
+        cratedb: 0,
+        request: totalRequestTime,
+      };
+    }
     return response;
   }
 
@@ -150,7 +152,7 @@ export class CrateDBClient {
     return query;
   }
 
-  async insert(tableName: string, obj: Record<string,any>, primaryKeys: string[] | null = null): Promise<any> {
+  async insert(tableName: string, obj: Record<string,unknown>, primaryKeys: string[] | null = null): Promise<CrateDBResponse> {
     // Validate inputs
     if (!tableName || typeof tableName !== "string") {
       throw new Error("tableName must be a valid string");
@@ -163,14 +165,14 @@ export class CrateDBClient {
     }
     
     const keys = Object.keys(obj);
-    let query = this._generateInsertQuery(tableName, keys, primaryKeys);
+    const query = this._generateInsertQuery(tableName, keys, primaryKeys);
     const args = Object.values(obj);
 
     // Execute the query
     return await this.execute(query, args);
   }
 
-  async insertMany(tableName: string, jsonArray: Record<string, any>[], primaryKeys: string[] | null = null): Promise<any> {
+  async insertMany(tableName: string, jsonArray: Record<string, unknown>[], primaryKeys: string[] | null = null): Promise<CrateDBBulkResponse> {
     const startInsertMany = Date.now();
     // Validate inputs
     if (!tableName || typeof tableName !== "string") {
@@ -185,7 +187,7 @@ export class CrateDBClient {
   
     // Extract unique keys from all objects
     const uniqueKeys = Array.from(
-      jsonArray.reduce((keys: Set<string>, obj: Record<string, any>) => {
+      jsonArray.reduce((keys: Set<string>, obj: Record<string, unknown>) => {
         Object.keys(obj).forEach((key) => keys.add(key));
         return keys;
       }, new Set<string>())
@@ -193,7 +195,7 @@ export class CrateDBClient {
   
     // Generate bulk arguments
     const bulkArgs = jsonArray.map((obj) =>
-      uniqueKeys.map((key) => (obj.hasOwnProperty(key) ? obj[key] : null))
+      uniqueKeys.map((key) => (Object.prototype.hasOwnProperty.call(obj, key) ? obj[key] : null))
     );
 
     const query = this._generateInsertQuery(tableName, uniqueKeys, primaryKeys);
@@ -201,34 +203,34 @@ export class CrateDBClient {
     // Execute the query with bulk arguments
     const response = await this.executeMany(query, bulkArgs);
     const elapsedTime = Date.now() - startInsertMany;
-    response.durations.preparation = elapsedTime - response.durations.request - response.durations.cratedb;
+    response.durations.preparation = elapsedTime - response.durations.request - (response.durations.cratedb ?? 0);
 
     return response;
   }
 
-  async update(tableName: string, options: Record<string, any>, whereClause: string): Promise<any> {
+  async update(tableName: string, options: Record<string, unknown>, whereClause: string): Promise<CrateDBResponse> {
     const { keys, values, args } = this._prepareOptions(options);
     const setClause = keys.map((key, i) => `${key}=${values[i]}`).join(', ');
     const query = `UPDATE ${tableName} SET ${setClause} WHERE ${whereClause}`;
     return await this.execute(query, args);
   }
 
-  async delete(tableName: string, whereClause: string): Promise<any> {
+  async delete(tableName: string, whereClause: string): Promise<CrateDBResponse> {
     const query = `DELETE FROM ${tableName} WHERE ${whereClause}`;
     return await this.execute(query);
   }
 
-  async drop(tableName: string): Promise<any> {
+  async drop(tableName: string): Promise<CrateDBResponse> {
     const query = `DROP TABLE IF EXISTS ${tableName}`;
     return await this.execute(query);
   }
 
-  async refresh(tableName: string): Promise<any> {
+  async refresh(tableName: string): Promise<CrateDBResponse> {
     const query = `REFRESH TABLE ${tableName}`;
     return await this.execute(query);
   }
 
-  async createTable(schema: Record<string, Record<string, string>>): Promise<any> {
+  async createTable(schema: Record<string, Record<string, string>>): Promise<CrateDBResponse> {
     const tableName = Object.keys(schema)[0];
     const columns = Object.entries(schema[tableName])
       .map(([col, type]) => `"${col}" ${type}`)
@@ -237,18 +239,18 @@ export class CrateDBClient {
     return await this.execute(query);
   }
 
-  _prepareOptions(options: Record<string, any>): { keys: string[]; values: string[]; args: any[] } {
+  _prepareOptions(options: Record<string, unknown>): { keys: string[]; values: string[]; args: unknown[] } {
     const keys = Object.keys(options).map(key => `"${key}"`);
     const values = keys.map(() => '?');
     const args = Object.values(options);
     return { keys, values, args };
   }
 
-  async _makeRequest(options: http.RequestOptions & { body?: string }): Promise<any> {
+  async _makeRequest(options: http.RequestOptions & { body?: string }): Promise<CrateDBBaseResponse> {
     return new Promise((resolve, reject) => {
       const requestBodySize = options.body ? Buffer.byteLength(options.body) : 0;
       const req = (this.protocol === 'https' ? https : http).request(options, (response) => {
-        let data: Buffer[] = [];
+        const data: Buffer[] = [];
         response.on('data', (chunk: Buffer) => data.push(chunk));
         response.on('end', () => {
           const rawResponse = Buffer.concat(data); // Raw response data as a buffer

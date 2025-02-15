@@ -27,10 +27,11 @@ jobs:
         with:
           node-version: 18 # Specify your required Node.js version
 
-      # Install dependencies
       - name: Install dependencies
         run: npm install
 
-      # Run tests
+      - name: Run lint
+        run: npm run lint
+
       - name: Run tests
         run: npm test

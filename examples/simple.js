@@ -1,4 +1,4 @@
-import { CrateDBClient } from '../src/CrateDBClient.js';
+import { CrateDBClient } from '../dist/CrateDBClient.js';
 
 (async () => {
   const client = new CrateDBClient({

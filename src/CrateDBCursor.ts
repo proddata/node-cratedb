@@ -1,8 +1,12 @@
 'use strict';
 
-import http, { AgentOptions } from 'http';
+import http from 'http';
 import https from 'https';
 import { CrateDBClient } from './CrateDBClient.js';
+import {
+  CrateDBResponse,
+  CrateDBRecord,
+} from "./interfaces";
 
 export class CrateDBCursor {
   public client: CrateDBClient;
@@ -38,13 +42,13 @@ export class CrateDBCursor {
     this.isOpen = true;
   }
 
-  async fetchone(): Promise<any> {
+  async fetchone(): Promise<CrateDBRecord|null> {
     this._ensureOpen();
     const result = await this._execute(`FETCH NEXT FROM ${this.cursorName}`);
-    return result ? result[0] : result; // Return the first row or null
+    return result.length > 0 ? result[0] : null; // Return the first row or null
   }
 
-  async fetchmany(size = 10): Promise<any> {
+  async fetchmany(size = 10): Promise<Array<CrateDBRecord>> {
     if(size < 1) {  // Return an empty array if size is less than 1
       return [];
     }
@@ -52,12 +56,12 @@ export class CrateDBCursor {
     return await this._execute(`FETCH ${size} FROM ${this.cursorName}`);
   }
 
-  async fetchall(): Promise<any> {
+  async fetchall(): Promise<Array<CrateDBRecord>>{
     this._ensureOpen();
     return await this._execute(`FETCH ALL FROM ${this.cursorName}`);
   }
 
-  async *iterate(size = 100): AsyncGenerator<Record<string, any>, void, unknown> {
+  async *iterate(size = 100): AsyncGenerator<CrateDBRecord, void, unknown> {
     this._ensureOpen();
   
     while (true) {
@@ -83,12 +87,12 @@ export class CrateDBCursor {
     this.agent.destroy();
   }
 
-  async _execute(sql:string): Promise<any> {
+  async _execute(sql:string): Promise<Array<CrateDBRecord>> {
     const options = { ...this.connectionOptions, body: JSON.stringify({ stmt: sql }) };
     try {
-      const response = await this.client._makeRequest(options);
+      const response: CrateDBResponse = await this.client._makeRequest(options);
       const { cols, rows, rowcount } = response;
-      return rowcount > 0 ? this._rebuildObjects(cols, rows) : null;
+      return rowcount && rowcount > 0 ? this._rebuildObjects(cols || [], rows as unknown[]) : [];
     } catch (error: unknown) {
       if (error instanceof Error) {
         throw new Error(`Error executing SQL: ${sql}. Details: ${error.message}`);
@@ -97,11 +101,11 @@ export class CrateDBCursor {
     }
   }
 
-  _rebuildObjects(cols: string[], rows: any[]): Record<string, any>[] {
+  _rebuildObjects(cols: Array<string>, rows: Array<unknown>): Array<CrateDBRecord> {
     return rows.map((row) => {
-      const obj: Record<string, any> = {};
+      const obj: Record<string, unknown> = {};
       cols.forEach((col, index) => {
-        obj[col] = row[index];
+        obj[col] = (row as unknown[])[index];
       });
       return obj;
     });

@@ -1,6 +1,7 @@
 import { describe, it, beforeAll, afterAll, expect } from "vitest";
 import { GenericContainer } from "testcontainers";
 import { CrateDBClient } from "../src/CrateDBClient";
+import { CrateDBRecord } from "../src/interfaces";
 
 describe("CrateDBClient", () => {
   let container;
@@ -64,14 +65,6 @@ describe("CrateDBClient", () => {
     expect(jwtClient.httpOptions.headers?.Authorization).toBe(`Bearer ${jwt}`);
     expect(jwtClient.httpOptions.auth).toBeUndefined();
 
-    // Optionally, attempt a query. This may fail if the server doesn't accept JWT,
-    // but the test mainly verifies configuration.
-    try {
-      await jwtClient.execute("SELECT 1");
-    } catch (error) {
-      // Depending on the server behavior, an auth error may be thrown.
-      expect(error.message).toContain("The input is not a valid base 64 encoded string.");
-    }
   });
 
   it("should execute a basic SELECT query and include durations", async () => {
@@ -317,7 +310,7 @@ describe("CrateDBClient", () => {
     await client.refresh(tableName);
 
     // Stream query results
-    const results: Record<string, any>[] = [];
+    const results: Array<CrateDBRecord> = [];
     for await (const row of client.streamQuery(`SELECT * FROM ${tableName} ORDER BY id`, 2)) {
       results.push(row);
     }

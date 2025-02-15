@@ -1,6 +1,7 @@
 import { describe, it, beforeAll, afterAll, expect } from "vitest";
 import { GenericContainer } from "testcontainers";
 import { CrateDBClient } from "../src/CrateDBClient";
+import { CrateDBRecord } from "../src/interfaces";
 
 describe("CrateDBCursor", () => {
   let container;
@@ -79,10 +80,10 @@ describe("CrateDBCursor", () => {
       expect(noMoreRows).toBeNull();
 
       const noMoreRowsMany = await cursor.fetchmany(2);
-      expect(noMoreRowsMany).toBeNull();
+      expect(noMoreRowsMany).toEqual([]);
 
       const noMoreRowsAll = await cursor.fetchall();
-      expect(noMoreRowsAll).toBeNull();
+      expect(noMoreRowsAll).toEqual([]);
     } finally {
       await cursor.close();
       await client.execute(`DROP TABLE ${tableName}`);
@@ -115,7 +116,7 @@ describe("CrateDBCursor", () => {
 
     // Use cursor to iterate over rows
     const cursor = client.createCursor(`SELECT * FROM ${tableName} ORDER BY id`);
-    const results: Record<string, any>[] = [];
+    const results: Array<CrateDBRecord> = [];
 
     try {
       await cursor.open();
