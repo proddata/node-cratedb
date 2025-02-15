@@ -32,6 +32,13 @@ To use the `CrateDBClient`:
 ```javascript
 import { CrateDBClient } from '@proddata/node-cratedb';
 
+//for local CrateDB instance
+const client = new CrateDBClient();
+```
+
+```javascript
+import { CrateDBClient } from '@proddata/node-cratedb';
+
 const client = new CrateDBClient({
   user: 'database-user',
   password: 'secretpassword!!',
@@ -51,12 +58,8 @@ import { CrateDBClient } from '@proddata/node-cratedb';
 
 const client = new CrateDBClient({
   host: 'my.database-server.com',
-  port: 4200,
   jwt: 'your.jwt.token.here',  // Use JWT for Bearer authentication
-  ssl: true,
-  keepAlive: true,
-  maxConnections: 20,
-  defaultSchema: 'my_schema'
+  ssl: true
 });
 ```
 
@@ -73,7 +76,7 @@ The `CrateDBClient` can be configured with either environment variables or direc
 | `password`         | `string` or `null`  | `''` or `process.env.CRATEDB_PASSWORD`          | Database password.                                              |
 | `host`             | `string`            | `'localhost'`  or `process.env.CRATEDB_HOST`    | Database host.                                                  |
 | `port`             | `number`            | `4200` or `process.env.CRATEDB_PORT`            | Database port.                                                  |
-| `defaultSchema`    | `string`            | `'doc'` or `process.env.CRATEDB_DEFAULT_SCHEMA` | Default schema for queries.                                     |
+| `defaultSchema`    | `string`            | `null` or `process.env.CRATEDB_DEFAULT_SCHEMA`  | Default schema for queries.                                     |
 | `connectionString` | `string`            | `null`                                          | Connection string, e.g., `https://user:password@host:port/`.    |
 | `ssl`              | `object` or `null`  | `null`                                          | SSL configuration;                                              |
 | `keepAlive`        | `boolean`           | `true`                                          | Enables HTTP keep-alive for persistent connections.             |
@@ -97,13 +100,13 @@ export CRATEDB_DEFAULT_SCHEMA=doc
 
 ### General Operations
 
-#### execute(sql, args)
+#### execute(sql, [args])
 
 Execute a raw SQL query.
 
 ```js
-await client.executeSql('SELECT * FROM my_table';);
-await client.executeSql('SELECT ?;', ['Hello World!']);
+await client.execute('SELECT * FROM my_table';);
+await client.execute('SELECT ?;', ['Hello World!']);
 ```
 
 #### executeMany(sql, bulk_args)
@@ -111,7 +114,7 @@ await client.executeSql('SELECT ?;', ['Hello World!']);
 Execute a raw bulk SQL query.
 
 ```js
-await client.executeSql('SELECT * FROM my_table', [['Hello'],['World']]);
+await client.execute('SELECT ?;', [['Hello'],['World']]);
 ```
 
 

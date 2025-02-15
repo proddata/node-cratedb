@@ -94,18 +94,10 @@ describe("CrateDBClient", () => {
     expect(response.sizes.response).toBeGreaterThan(0);
   });
 
-  it("should return an error for invalid SQL queries", async () => {
-    try {
-      await client.execute("SELECT * FROM invalid_table");
-    } catch (error) {
-      expect(error.message).toContain("Table 'invalid_table' unknown");
-      if (error.response && error.response.durations) {
-        // Check if durations object exists in the error response
-        expect(error.response.durations).toBeDefined();
-        expect(error.response.durations.request).toBeDefined();
-        expect(error.response.durations.cratedb).toBeDefined();
-      }
-    }
+  it("should return, but not throw an error for invalid SQL queries", async () => {
+    const response = await client.execute("SELECT * FROM invalid_table;");
+    expect(response.error.code).toBe(4041);
+    expect(response.error.message).toContain("Relation 'invalid_table' unknown");
   });
 
   it("should handle upsert conflicts correctly when inserting data", async () => {

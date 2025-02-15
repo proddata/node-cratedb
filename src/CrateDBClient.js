@@ -12,7 +12,7 @@ const defaultConfig = {
   jwt: null, // JWT token for Bearer authentication
   host: process.env.CRATEDB_HOST || 'localhost',
   port: process.env.CRATEDB_PORT ? parseInt(process.env.CRATEDB_PORT, 10) : 4200, // Default CrateDB port
-  defaultSchema: process.env.CRATEDB_HOST || 'doc', // Default schema for queries
+  defaultSchema: process.env.CRATEDB_DEFAULT_SCHEMA || null, // Default schema for queries
   connectionString: null,
   ssl: false,
   keepAlive: true, // Enable persistent connections by default
@@ -104,23 +104,19 @@ class CrateDBClient {
 
   async _execute(stmt, args = null, bulk_args = null) {
     const startRequestTime = Date.now();
-  
     const body = JSON.stringify(args ? { stmt, args } : { stmt, bulk_args });
 
     const options = { ...this.httpOptions, body };
     const response = await this._makeRequest(options, this.protocol);
-  
     const totalRequestTime = Date.now() - startRequestTime;
     response.durations = {
       cratedb: response.duration,
       request: totalRequestTime - response.duration,
     };
-  
     return response;
   }
 
   // Convenience methods for common SQL operations
-
   _generateInsertQuery(tableName, keys, primaryKeys) {
     const placeholders = keys.map(() => "?").join(", ");
     let query = `INSERT INTO ${tableName} (${keys.map((key) => `"${key}"`).join(", ")}) VALUES (${placeholders})`;
@@ -246,8 +242,13 @@ class CrateDBClient {
               ...parsedResponse,
               sizes: {response: responseBodySize, request: requestBodySize}
             });
-          } catch (err) {
-            reject(new Error(`Failed to parse response: ${err.message}. Raw response: ${rawResponse.toString()}`));
+          } catch (parseErr) {
+            if (response.statusCode === 401) {
+              reject(new Error("Authentication error: Invalid credentials or insufficient permissions."));
+            } else if (response.statusCode === 503) {
+              reject(new Error("Service unavailable: server is not available (503)."));
+            }
+            reject(new Error(`Failed to parse response: ${parseErr.message}. Raw response: ${rawResponse.toString()}`));
           }
         });
       });
