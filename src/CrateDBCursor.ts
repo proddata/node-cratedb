@@ -1,10 +1,18 @@
 'use strict';
 
-import http from 'http';
+import http, { AgentOptions } from 'http';
 import https from 'https';
+import { CrateDBClient } from './CrateDBClient.js';
 
 export class CrateDBCursor {
-  constructor(client, sql) {
+  public client: CrateDBClient;
+  public sql: string;
+  public cursorName: string;
+  public isOpen: boolean;
+  public agent: http.Agent | https.Agent;
+  public connectionOptions: http.RequestOptions;
+
+  constructor(client: CrateDBClient, sql: string) {
     this.client = client; // Reference to the CrateDBClient instance
     this.sql = sql; // The SQL statement for the cursor
     this.cursorName = `cursor_${Date.now()}`; // Unique cursor name
@@ -17,28 +25,26 @@ export class CrateDBCursor {
     
     // Create a new agent with its own socket for this cursor
     this.agent = client.cfg.ssl ? new https.Agent(agentOptions) : new http.Agent(agentOptions);
-  
     this.connectionOptions = { ...client.httpOptions, agent: this.agent };
   }
 
-  async open() {
+  async open(): Promise<void>{
     if (this.isOpen) {
       throw new Error('Cursor is already open');
     }
-
     // Start a transaction and declare the cursor
     await this._execute('BEGIN');
     await this._execute(`DECLARE ${this.cursorName} NO SCROLL CURSOR FOR ${this.sql}`);
     this.isOpen = true;
   }
 
-  async fetchone() {
+  async fetchone(): Promise<any> {
     this._ensureOpen();
     const result = await this._execute(`FETCH NEXT FROM ${this.cursorName}`);
     return result ? result[0] : result; // Return the first row or null
   }
 
-  async fetchmany(size = 10) {
+  async fetchmany(size = 10): Promise<any> {
     if(size < 1) {  // Return an empty array if size is less than 1
       return [];
     }
@@ -46,12 +52,12 @@ export class CrateDBCursor {
     return await this._execute(`FETCH ${size} FROM ${this.cursorName}`);
   }
 
-  async fetchall() {
+  async fetchall(): Promise<any> {
     this._ensureOpen();
     return await this._execute(`FETCH ALL FROM ${this.cursorName}`);
   }
 
-  async *iterate(size = 100) {
+  async *iterate(size = 100): AsyncGenerator<Record<string, any>, void, unknown> {
     this._ensureOpen();
   
     while (true) {
@@ -67,32 +73,33 @@ export class CrateDBCursor {
     }
   }
 
-  async close() {
+  async close(): Promise<void> {
     this._ensureOpen();
-
     // Close the cursor and end the transaction
     await this._execute(`CLOSE ${this.cursorName}`);
     await this._execute('COMMIT');
     this.isOpen = false;
-
     // Destroy the agent's socket connections to ensure the TCP connection is closed
     this.agent.destroy();
   }
 
-  async _execute(sql) {
+  async _execute(sql:string): Promise<any> {
     const options = { ...this.connectionOptions, body: JSON.stringify({ stmt: sql }) };
     try {
-      const response = await this.client._makeRequest(options, this.client.protocol);
+      const response = await this.client._makeRequest(options);
       const { cols, rows, rowcount } = response;
       return rowcount > 0 ? this._rebuildObjects(cols, rows) : null;
-    } catch (error) {
-      throw new Error(`Error executing SQL: ${sql}. Details: ${error.message}`);
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        throw new Error(`Error executing SQL: ${sql}. Details: ${error.message}`);
+      }
+      throw error;
     }
   }
 
-  _rebuildObjects(cols, rows) {
+  _rebuildObjects(cols: string[], rows: any[]): Record<string, any>[] {
     return rows.map((row) => {
-      const obj = {};
+      const obj: Record<string, any> = {};
       cols.forEach((col, index) => {
         obj[col] = row[index];
       });
@@ -100,7 +107,7 @@ export class CrateDBCursor {
     });
   }
 
-  _ensureOpen() {
+  _ensureOpen(): void {
     if (!this.isOpen) {
       throw new Error('Cursor is not open. Call open() before performing this operation.');
     }

@@ -1,6 +1,6 @@
 import { describe, it, beforeAll, afterAll, expect } from "vitest";
 import { GenericContainer } from "testcontainers";
-import { CrateDBClient } from "./CrateDBClient.js";
+import { CrateDBClient } from "../src/CrateDBClient";
 
 describe("CrateDBClient", () => {
   let container;
@@ -61,8 +61,7 @@ describe("CrateDBClient", () => {
     });
 
     // Verify that the Authorization header is set to the JWT value
-    expect(jwtClient.httpOptions.headers.Authorization).toBe(`Bearer ${jwt}`);
-    // And that basic auth is not used
+    expect(jwtClient.httpOptions.headers?.Authorization).toBe(`Bearer ${jwt}`);
     expect(jwtClient.httpOptions.auth).toBeUndefined();
 
     // Optionally, attempt a query. This may fail if the server doesn't accept JWT,
@@ -318,7 +317,7 @@ describe("CrateDBClient", () => {
     await client.refresh(tableName);
 
     // Stream query results
-    const results = [];
+    const results: Record<string, any>[] = [];
     for await (const row of client.streamQuery(`SELECT * FROM ${tableName} ORDER BY id`, 2)) {
       results.push(row);
     }

@@ -1,6 +1,6 @@
 import { describe, it, beforeAll, afterAll, expect } from "vitest";
 import { GenericContainer } from "testcontainers";
-import { CrateDBClient } from "./CrateDBClient.js";
+import { CrateDBClient } from "../src/CrateDBClient";
 
 describe("CrateDBCursor", () => {
   let container;
@@ -115,7 +115,7 @@ describe("CrateDBCursor", () => {
 
     // Use cursor to iterate over rows
     const cursor = client.createCursor(`SELECT * FROM ${tableName} ORDER BY id`);
-    const results = [];
+    const results: Record<string, any>[] = [];
 
     try {
       await cursor.open();

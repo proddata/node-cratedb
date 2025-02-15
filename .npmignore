@@ -6,3 +6,6 @@ coverage
 *.tmp
 .DS_Store
 .env
+.github/
+.vscode/
+.npmrc

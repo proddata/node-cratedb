@@ -1,12 +1,24 @@
 'use strict';
-
-import http from 'http';
+import http, { AgentOptions } from 'http';
 import https from 'https';
 import { URL } from 'url';
 import { CrateDBCursor } from './CrateDBCursor.js';
 
+interface CrateDBConfig {
+  user: string;
+  password: string;
+  jwt: string | null;
+  host: string;
+  port: number;
+  defaultSchema: string | null;
+  connectionString: string | null;
+  ssl: boolean;
+  keepAlive: boolean;
+  maxConnections: number;
+}
+
 // Configuration options with CrateDB-specific environment variables
-const defaultConfig = {
+const defaultConfig: CrateDBConfig = {
   user: process.env.CRATEDB_USER || 'crate',
   password: process.env.CRATEDB_PASSWORD || '',
   jwt: null, // JWT token for Bearer authentication
@@ -19,9 +31,14 @@ const defaultConfig = {
   maxConnections: 20,
 };
 
-class CrateDBClient {
+export class CrateDBClient {
+  public cfg: CrateDBConfig;
+  public httpAgent: http.Agent | https.Agent;
+  public protocol: 'http' | 'https';
+  public httpOptions: http.RequestOptions;
+
   constructor(config = {}) {
-    const cfg = { ...defaultConfig, ...config };
+    const cfg: CrateDBConfig = { ...defaultConfig, ...config };
 
     // Parse connection string if provided
     if (cfg.connectionString) {
@@ -29,12 +46,12 @@ class CrateDBClient {
       cfg.user = cfg.user || parsed.username;
       cfg.password = cfg.password || parsed.password;
       cfg.host = parsed.hostname;
-      cfg.port = cfg.port || parsed.port;
+      cfg.port = cfg.port || parseInt(parsed.port, 10);
       cfg.ssl = cfg.ssl || parsed.protocol === 'https:';
     }
 
     // Set up HTTP(S) agent options based on configuration
-    const agentOptions = {
+    const agentOptions: AgentOptions = {
       keepAlive: cfg.keepAlive,
       maxSockets: cfg.maxConnections,
       maxFreeSockets: cfg.maxConnections,
@@ -71,11 +88,11 @@ class CrateDBClient {
 
   }
 
-  createCursor(sql) {
+  createCursor(sql: string): CrateDBCursor {
     return new CrateDBCursor(this, sql);
   }
 
-  async *streamQuery(sql, batchSize = 100) {
+  async *streamQuery(sql: string, batchSize: number = 100): AsyncGenerator<any, void, unknown> {
     const cursor = this.createCursor(sql);
   
     try {
@@ -86,38 +103,38 @@ class CrateDBClient {
     }
   }
 
-  async execute(stmt, args = []) {
+  async execute(stmt: string, args: any[] = []): Promise<any> {
     return await this._execute(stmt, args);
   }
 
-  async executeMany(stmt, bulk_args = []) {
+  async executeMany(stmt: string, bulk_args: any[][] = []): Promise<any> {
     const res = await this._execute(stmt, null, bulk_args);
-    const bulk_errors = res.results
-    .map((result, i) => (result.rowcount === -2 ? i : null))
-    .filter(i => i !== null);
+    const results: any[] = (res as any).results || [];
+    const bulk_errors = results
+      .map((result, i) => (result.rowcount === -2 ? i : null))
+      .filter((i) => i !== null);
 
     if (bulk_errors.length > 0) {
-      res.bulk_errors = bulk_errors;
+      (res as any).bulk_errors = bulk_errors;
     }
     return res;
   }
 
-  async _execute(stmt, args = null, bulk_args = null) {
+  async _execute(stmt: string, args: any[] | null = null, bulk_args: any[][] | null = null): Promise<any> {
     const startRequestTime = Date.now();
     const body = JSON.stringify(args ? { stmt, args } : { stmt, bulk_args });
-
     const options = { ...this.httpOptions, body };
-    const response = await this._makeRequest(options, this.protocol);
+    const response = await this._makeRequest(options);
     const totalRequestTime = Date.now() - startRequestTime;
-    response.durations = {
-      cratedb: response.duration,
-      request: totalRequestTime - response.duration,
+    (response as any).durations = {
+      cratedb: (response as any).duration,
+      request: totalRequestTime - (response as any).duration,
     };
     return response;
   }
 
   // Convenience methods for common SQL operations
-  _generateInsertQuery(tableName, keys, primaryKeys) {
+  _generateInsertQuery(tableName: string, keys: string[], primaryKeys: string[] | null): string {
     const placeholders = keys.map(() => "?").join(", ");
     let query = `INSERT INTO ${tableName} (${keys.map((key) => `"${key}"`).join(", ")}) VALUES (${placeholders})`;
 
@@ -133,7 +150,7 @@ class CrateDBClient {
     return query;
   }
 
-  async insert(tableName, obj, primaryKeys = null) {
+  async insert(tableName: string, obj: Record<string,any>, primaryKeys: string[] | null = null): Promise<any> {
     // Validate inputs
     if (!tableName || typeof tableName !== "string") {
       throw new Error("tableName must be a valid string");
@@ -153,7 +170,7 @@ class CrateDBClient {
     return await this.execute(query, args);
   }
 
-  async insertMany(tableName, jsonArray, primaryKeys = null) {
+  async insertMany(tableName: string, jsonArray: Record<string, any>[], primaryKeys: string[] | null = null): Promise<any> {
     const startInsertMany = Date.now();
     // Validate inputs
     if (!tableName || typeof tableName !== "string") {
@@ -168,10 +185,10 @@ class CrateDBClient {
   
     // Extract unique keys from all objects
     const uniqueKeys = Array.from(
-      jsonArray.reduce((keys, obj) => {
+      jsonArray.reduce((keys: Set<string>, obj: Record<string, any>) => {
         Object.keys(obj).forEach((key) => keys.add(key));
         return keys;
-      }, new Set())
+      }, new Set<string>())
     );
   
     // Generate bulk arguments
@@ -189,29 +206,29 @@ class CrateDBClient {
     return response;
   }
 
-  async update(tableName, options, whereClause) {
+  async update(tableName: string, options: Record<string, any>, whereClause: string): Promise<any> {
     const { keys, values, args } = this._prepareOptions(options);
     const setClause = keys.map((key, i) => `${key}=${values[i]}`).join(', ');
     const query = `UPDATE ${tableName} SET ${setClause} WHERE ${whereClause}`;
     return await this.execute(query, args);
   }
 
-  async delete(tableName, whereClause) {
+  async delete(tableName: string, whereClause: string): Promise<any> {
     const query = `DELETE FROM ${tableName} WHERE ${whereClause}`;
     return await this.execute(query);
   }
 
-  async drop(tableName) {
+  async drop(tableName: string): Promise<any> {
     const query = `DROP TABLE IF EXISTS ${tableName}`;
     return await this.execute(query);
   }
 
-  async refresh(tableName) {
+  async refresh(tableName: string): Promise<any> {
     const query = `REFRESH TABLE ${tableName}`;
     return await this.execute(query);
   }
 
-  async createTable(schema) {
+  async createTable(schema: Record<string, Record<string, string>>): Promise<any> {
     const tableName = Object.keys(schema)[0];
     const columns = Object.entries(schema[tableName])
       .map(([col, type]) => `"${col}" ${type}`)
@@ -220,19 +237,19 @@ class CrateDBClient {
     return await this.execute(query);
   }
 
-  _prepareOptions(options) {
+  _prepareOptions(options: Record<string, any>): { keys: string[]; values: string[]; args: any[] } {
     const keys = Object.keys(options).map(key => `"${key}"`);
     const values = keys.map(() => '?');
     const args = Object.values(options);
     return { keys, values, args };
   }
 
-  async _makeRequest(options) {
+  async _makeRequest(options: http.RequestOptions & { body?: string }): Promise<any> {
     return new Promise((resolve, reject) => {
       const requestBodySize = options.body ? Buffer.byteLength(options.body) : 0;
       const req = (this.protocol === 'https' ? https : http).request(options, (response) => {
-        let data = [];
-        response.on('data', (chunk) => data.push(chunk));
+        let data: Buffer[] = [];
+        response.on('data', (chunk: Buffer) => data.push(chunk));
         response.on('end', () => {
           const rawResponse = Buffer.concat(data); // Raw response data as a buffer
           const responseBodySize = rawResponse.length;
@@ -242,13 +259,17 @@ class CrateDBClient {
               ...parsedResponse,
               sizes: {response: responseBodySize, request: requestBodySize}
             });
-          } catch (parseErr) {
+          } catch (parseErr: unknown) {
             if (response.statusCode === 401) {
               reject(new Error("Authentication error: Invalid credentials or insufficient permissions."));
             } else if (response.statusCode === 503) {
               reject(new Error("Service unavailable: server is not available (503)."));
             }
-            reject(new Error(`Failed to parse response: ${parseErr.message}. Raw response: ${rawResponse.toString()}`));
+            if (parseErr instanceof Error) {
+              reject(new Error(`Failed to parse response: ${parseErr.message}. Raw response: ${rawResponse.toString()}`));
+            } else {
+              reject(new Error(`Failed to parse response. Raw response: ${rawResponse.toString()}`));
+            }
           }
         });
       });
@@ -257,19 +278,3 @@ class CrateDBClient {
     });
   }
 }
-
-// Export CrateDBClient class
-export { CrateDBClient };
-
-// Usage example
-// import { CrateDBClient } from './CrateDBClient.js';
-// const client = new CrateDBClient({
-//   user: 'database-user',
-//   password: 'secretpassword!!',
-//   host: 'my.database-server.com',
-//   port: 5334,
-//   ssl: true,             // Use HTTPS
-//   keepAlive: true,       // Enable persistent connections
-//   maxConnections: 20,         // Limit to 10 concurrent sockets
-//   defaultSchema: 'my_schema' // Default schema for queries
-// });
