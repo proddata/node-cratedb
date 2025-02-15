@@ -1,6 +1,5 @@
 name: Run Tests
 
-# Trigger the workflow on push or pull request
 on:
   push:
     branches:
@@ -9,23 +8,18 @@ on:
     branches:
       - main
 
-# Define the jobs to run
 jobs:
   test:
-    # Use the latest Ubuntu environment
     runs-on: ubuntu-latest
 
-    # Define the steps for this job
     steps:
-      # Checkout the repository
       - name: Checkout code
         uses: actions/checkout@v3
 
-      # Set up Node.js
       - name: Set up Node.js
-        uses: actions/setup-node@v3
+        uses: actions/setup-node@v4
         with:
-          node-version: 18 # Specify your required Node.js version
+          node-version: 18
 
       - name: Install dependencies
         run: npm install
