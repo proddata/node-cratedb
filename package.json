@@ -1,6 +1,6 @@
 {
   "name": "@proddata/node-cratedb",
-  "version": "0.0.9",
+  "version": "0.0.10",
   "description": "Node.js client for CrateDB",
   "type": "module",
   "types": "dist/esm/CrateDBClient.d.ts",
