@@ -1,4 +1,4 @@
-import { CrateDBTypes } from './CrateDBTypes';
+import { CrateDBTypes } from './CrateDBTypes.js';
 import { CrateDBBaseResponse } from './interfaces';
 
 export class CrateDBSerializer {

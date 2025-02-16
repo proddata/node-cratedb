@@ -17,19 +17,26 @@ To install `node-cratedb` using npm:
 npm install @proddata/node-cratedb
 ```
 
-> [!NOTE]
-> This is a modern ES6 module, so you can import it using `import` statements.
-
 To use the `CrateDBClient`:
 
 1. Import the `CrateDBClient` class.
 2. Instantiate it with your configuration options.
 3. Call any of the CRUD and DDL methods provided.
 
-For a local CrateDB Instance:
+Import and instantiate CrateDBClient:
+
+**ESM (ECMAScript Modules)**
 
 ```javascript
 import { CrateDBClient } from '@proddata/node-cratedb';
+
+const client = new CrateDBClient();
+```
+
+**CommonJS (CJS)**
+
+```javascript
+const { CrateDBClient } = require('@proddata/node-cratedb');
 
 const client = new CrateDBClient();
 ```

@@ -3,7 +3,7 @@ import http, { AgentOptions } from 'http';
 import https from 'https';
 import { URL } from 'url';
 import { CrateDBCursor } from './CrateDBCursor.js';
-import { CrateDBSerializer } from '../src/CrateDBSerializer';
+import { CrateDBSerializer } from './CrateDBSerializer.js';
 import {
   CrateDBConfig,
   CrateDBBaseResponse,
