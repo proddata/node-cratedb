@@ -5,12 +5,10 @@
 
 This library is a lightweight Node.js client derived from `node-crate` for interacting with CrateDB via its **HTTP endpoint**. Unlike libraries such as `node-postgres`, which use the PostgreSQL wire protocol, this client communicates with CrateDB's native HTTP API.
 
-> [!CAUTION]
-> **This library is primarily a proof of concept.**  
-> While it provides basic functionality to interact with CrateDB, it is not production-ready and lacks the robustness of established libraries.  
-> 
+> [!CAUTION] > **This library is primarily a proof of concept.**  
+> While it provides basic functionality to interact with CrateDB, it is not production-ready and lacks the robustness of established libraries.
+>
 > For production use, consider mature libraries like [`node-postgres`](https://node-postgres.com/) which leverage CrateDB's PostgreSQL compatibility. Use this client only for **testing, experimentation**, or if you know what you're doing. :wink:
-
 
 ## Installation
 
@@ -44,10 +42,10 @@ const client = new CrateDBClient({
   password: 'secretpassword!!',
   host: 'my.database-server.com',
   port: 4200,
-  ssl: true,             // Use HTTPS
-  keepAlive: true,       // Enable persistent connections
-  maxConnections: 20,         // Limit to 10 concurrent sockets
-  defaultSchema: 'my_schema' // Default schema for queries
+  ssl: true, // Use HTTPS
+  keepAlive: true, // Enable persistent connections
+  maxConnections: 20, // Limit to 10 concurrent sockets
+  defaultSchema: 'my_schema', // Default schema for queries
 });
 ```
 
@@ -58,11 +56,10 @@ import { CrateDBClient } from '@proddata/node-cratedb';
 
 const client = new CrateDBClient({
   host: 'my.database-server.com',
-  jwt: 'your.jwt.token.here',  // Use JWT for Bearer authentication
-  ssl: true
+  jwt: 'your.jwt.token.here', // Use JWT for Bearer authentication
+  ssl: true,
 });
 ```
-
 
 ### Configuration
 
@@ -70,17 +67,17 @@ The `CrateDBClient` can be configured with either environment variables or direc
 
 #### Configuration Options
 
-| Option             | Type                | Default Value                                   | Description                                                     |
-|--------------------|---------------------|-------------------------------------------------|-----------------------------------------------------------------|
-| `user`             | `string`            | `'crate'` or `process.env.CRATEDB_USER`         | Database user.                                                  |
-| `password`         | `string` or `null`  | `''` or `process.env.CRATEDB_PASSWORD`          | Database password.                                              |
-| `host`             | `string`            | `'localhost'`  or `process.env.CRATEDB_HOST`    | Database host.                                                  |
-| `port`             | `number`            | `4200` or `process.env.CRATEDB_PORT`            | Database port.                                                  |
-| `defaultSchema`    | `string`            | `null` or `process.env.CRATEDB_DEFAULT_SCHEMA`  | Default schema for queries.                                     |
-| `connectionString` | `string`            | `null`                                          | Connection string, e.g., `https://user:password@host:port/`.    |
-| `ssl`              | `object` or `null`  | `null`                                          | SSL configuration;                                              |
-| `keepAlive`        | `boolean`           | `true`                                          | Enables HTTP keep-alive for persistent connections.             |
-| `maxConnections`   | `number`            | `20`                                      | Limits the maximum number of concurrent connections.            |
+| Option             | Type               | Default Value                                  | Description                                                  |
+| ------------------ | ------------------ | ---------------------------------------------- | ------------------------------------------------------------ |
+| `user`             | `string`           | `'crate'` or `process.env.CRATEDB_USER`        | Database user.                                               |
+| `password`         | `string` or `null` | `''` or `process.env.CRATEDB_PASSWORD`         | Database password.                                           |
+| `host`             | `string`           | `'localhost'` or `process.env.CRATEDB_HOST`    | Database host.                                               |
+| `port`             | `number`           | `4200` or `process.env.CRATEDB_PORT`           | Database port.                                               |
+| `defaultSchema`    | `string`           | `null` or `process.env.CRATEDB_DEFAULT_SCHEMA` | Default schema for queries.                                  |
+| `connectionString` | `string`           | `null`                                         | Connection string, e.g., `https://user:password@host:port/`. |
+| `ssl`              | `object` or `null` | `null`                                         | SSL configuration;                                           |
+| `keepAlive`        | `boolean`          | `true`                                         | Enables HTTP keep-alive for persistent connections.          |
+| `maxConnections`   | `number`           | `20`                                           | Limits the maximum number of concurrent connections.         |
 
 #### Environment Variables
 
@@ -114,9 +111,8 @@ await client.execute('SELECT ?;', ['Hello World!']);
 Execute a raw bulk SQL query.
 
 ```js
-await client.execute('SELECT ?;', [['Hello'],['World']]);
+await client.execute('SELECT ?;', [['Hello'], ['World']]);
 ```
-
 
 #### streamQuery(sql, batchSize)
 
@@ -147,10 +143,10 @@ If `primaryKeys` are provided, the method will handle conflicts by updating the 
 
 ```javascript
 // Insert a row with primary key conflict resolution
-await client.insert("my_table", { id: 1, column1: "value1", column2: "value2" }, ["id"]);
+await client.insert('my_table', { id: 1, column1: 'value1', column2: 'value2' }, ['id']);
 
 // Insert a row without conflict resolution
-await client.insert("my_table", { id: 1, column1: "value1", column2: "value2" });
+await client.insert('my_table', { id: 1, column1: 'value1', column2: 'value2' });
 ```
 
 #### insertMany(tableName, jsonArray, primaryKeys = null)
@@ -165,15 +161,15 @@ If `primaryKeys` are provided, the method will handle conflicts by updating the 
 
 ```javascript
 const bulkData = [
-  { id: 1, name: "Earth", kind: "Planet", description: "A beautiful place." },
-  { id: 2, name: "Mars", kind: "Planet", description: "The red planet." },
-  { id: 1, name: "Earth Updated", kind: "Planet", description: "Updated description." }, // Conflict on id
+  { id: 1, name: 'Earth', kind: 'Planet', description: 'A beautiful place.' },
+  { id: 2, name: 'Mars', kind: 'Planet', description: 'The red planet.' },
+  { id: 1, name: 'Earth Updated', kind: 'Planet', description: 'Updated description.' }, // Conflict on id
 ];
 
-await client.insertMany("my_table", bulkData, ["id"]);
+await client.insertMany('my_table', bulkData, ['id']);
 // Conflicting row with `id: 1` will be updated instead of skipped.
 
-await client.insertMany("my_table", bulkData);
+await client.insertMany('my_table', bulkData);
 // Conflicting rows will be skipped as no `primaryKeys` are provided.
 ```
 
@@ -209,7 +205,6 @@ Refresh a specified table.
 await client.refresh('my_table');
 ```
 
-
 #### createTable(schema)
 
 Create a new table based on a schema definition.
@@ -219,8 +214,8 @@ await client.createTable({
   my_table: {
     id: 'INTEGER PRIMARY KEY',
     name: 'STRING',
-    created_at: 'TIMESTAMP'
-  }
+    created_at: 'TIMESTAMP',
+  },
 });
 ```
 
@@ -257,8 +252,27 @@ for await (const row of cursor.iterate(5)) {
 await cursor.close();
 ```
 
+## Handling JavaScript `BigInt` and CrateDB `LONG` Values
+
+This library leverages modern JavaScript features — such as `JSON.rawJSON()` -
+to accurately serialize and deserialize `BigInt` values.
+
+### Serialization
+
+- **BigInt to LONG:**
+  When serializing, JavaScript `BigInt` values their precision is preserved.
+  e.g. `BigInt(12345678901234567890)` is serialized as `12345678901234567890`.
+
+### Deserialization
+
+- **Top-Level LONG Columns:**  
+  If type information is available in the result set, columns defined as CrateDB  
+  `LONG` are automatically converted to `BigInt`.
+
+- **Large Integer Values:**  
+  If type information is unavailable, integers exceeding `Number.MAX_SAFE_INTEGER`
+  and without a decimal point are converted to `BigInt` on a best-effort basis.
 
 ## License
 
 MIT License. Feel free to use and modify this library as per the terms of the license.
-

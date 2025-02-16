@@ -13,6 +13,8 @@ export interface CrateDBConfig {
 
 export interface CrateDBBaseResponse {
   cols?: string[];
+  col_types?: number[];
+  rows?: Array<Array<unknown>>;
   duration?: number;
   durations: {
     cratedb?: number;
@@ -27,7 +29,6 @@ export interface CrateDBBaseResponse {
 }
 
 export interface CrateDBResponse extends CrateDBBaseResponse {
-  col_types?: number[];
   rows?: Array<Array<unknown>>;
   rowcount?: number;
 }

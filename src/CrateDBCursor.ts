@@ -4,6 +4,7 @@ import http from 'http';
 import https from 'https';
 import { CrateDBClient } from './CrateDBClient.js';
 import { CrateDBResponse, CrateDBRecord } from './interfaces';
+import { CrateDBSerializer } from './CrateDBSerializer.js';
 
 export class CrateDBCursor {
   public client: CrateDBClient;
@@ -86,7 +87,7 @@ export class CrateDBCursor {
   }
 
   async _execute(sql: string): Promise<Array<CrateDBRecord>> {
-    const options = { ...this.connectionOptions, body: JSON.stringify({ stmt: sql }) };
+    const options = { ...this.connectionOptions, body: CrateDBSerializer.stringify({ stmt: sql }) };
     try {
       const response: CrateDBResponse = await this.client._makeRequest(options);
       const { cols, rows, rowcount } = response;

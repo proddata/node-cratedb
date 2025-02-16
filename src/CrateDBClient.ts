@@ -3,6 +3,7 @@ import http, { AgentOptions } from 'http';
 import https from 'https';
 import { URL } from 'url';
 import { CrateDBCursor } from './CrateDBCursor.js';
+import { CrateDBSerializer } from '../src/CrateDBSerializer';
 import {
   CrateDBConfig,
   CrateDBBaseResponse,
@@ -120,7 +121,7 @@ export class CrateDBClient {
     bulk_args: unknown[][] | null = null
   ): Promise<CrateDBBaseResponse> {
     const startRequestTime = Date.now();
-    const body = JSON.stringify(args ? { stmt, args } : { stmt, bulk_args });
+    const body = CrateDBSerializer.stringify(args ? { stmt, args } : { stmt, bulk_args });
     const options = { ...this.httpOptions, body };
     const response = await this._makeRequest(options);
     const totalRequestTime = Date.now() - startRequestTime;
@@ -271,7 +272,7 @@ export class CrateDBClient {
           const rawResponse = Buffer.concat(data); // Raw response data as a buffer
           const responseBodySize = rawResponse.length;
           try {
-            const parsedResponse = JSON.parse(rawResponse.toString());
+            const parsedResponse = CrateDBSerializer.deserialize(rawResponse.toString());
             resolve({
               ...parsedResponse,
               sizes: { response: responseBodySize, request: requestBodySize },
