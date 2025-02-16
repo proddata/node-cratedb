@@ -62,8 +62,8 @@ describe('CrateDBClient', () => {
     });
 
     // Verify that the Authorization header is set to the JWT value
-    expect(jwtClient.httpOptions.headers?.Authorization).toBe(`Bearer ${jwt}`);
-    expect(jwtClient.httpOptions.auth).toBeUndefined();
+    expect(jwtClient.getHttpOptions().headers?.Authorization).toBe(`Bearer ${jwt}`);
+    expect(jwtClient.getHttpOptions().auth).toBeUndefined();
   });
 
   it('should execute a basic SELECT query and include durations', async () => {

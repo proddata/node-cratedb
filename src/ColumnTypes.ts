@@ -1,4 +1,4 @@
-export enum CrateDBTypes {
+export enum ColumnTypes {
   NULL = 0,
   NOT_SUPPORTED = 1,
   CHAR = 2,

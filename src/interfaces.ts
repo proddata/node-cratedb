@@ -9,7 +9,14 @@ export interface CrateDBConfig {
   ssl: boolean;
   keepAlive: boolean;
   maxConnections: number;
+  deserialization: DeserializationConfig;
 }
+
+export type DeserializationConfig = {
+  long: 'bigint' | 'number';
+  timestamp: 'date' | 'number';
+  date: 'date' | 'number';
+};
 
 export interface CrateDBBaseResponse {
   cols?: string[];

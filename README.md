@@ -76,17 +76,18 @@ The `CrateDBClient` can be configured with either environment variables or direc
 
 #### Configuration Options
 
-| Option             | Type               | Default Value                                  | Description                                                  |
-| ------------------ | ------------------ | ---------------------------------------------- | ------------------------------------------------------------ |
-| `user`             | `string`           | `'crate'` or `process.env.CRATEDB_USER`        | Database user.                                               |
-| `password`         | `string` or `null` | `''` or `process.env.CRATEDB_PASSWORD`         | Database password.                                           |
-| `host`             | `string`           | `'localhost'` or `process.env.CRATEDB_HOST`    | Database host.                                               |
-| `port`             | `number`           | `4200` or `process.env.CRATEDB_PORT`           | Database port.                                               |
-| `defaultSchema`    | `string`           | `null` or `process.env.CRATEDB_DEFAULT_SCHEMA` | Default schema for queries.                                  |
-| `connectionString` | `string`           | `null`                                         | Connection string, e.g., `https://user:password@host:port/`. |
-| `ssl`              | `object` or `null` | `null`                                         | SSL configuration;                                           |
-| `keepAlive`        | `boolean`          | `true`                                         | Enables HTTP keep-alive for persistent connections.          |
-| `maxConnections`   | `number`           | `20`                                           | Limits the maximum number of concurrent connections.         |
+| Option             | Type                    | Default Value                                  | Description                                                  |
+| ------------------ | ----------------------- | ---------------------------------------------- | ------------------------------------------------------------ |
+| `user`             | `string`                | `'crate'` or `process.env.CRATEDB_USER`        | Database user.                                               |
+| `password`         | `string` or `null`      | `''` or `process.env.CRATEDB_PASSWORD`         | Database password.                                           |
+| `host`             | `string`                | `'localhost'` or `process.env.CRATEDB_HOST`    | Database host.                                               |
+| `port`             | `number`                | `4200` or `process.env.CRATEDB_PORT`           | Database port.                                               |
+| `defaultSchema`    | `string`                | `null` or `process.env.CRATEDB_DEFAULT_SCHEMA` | Default schema for queries.                                  |
+| `connectionString` | `string`                | `null`                                         | Connection string, e.g., `https://user:password@host:port/`. |
+| `ssl`              | `object` or `null`      | `null`                                         | SSL configuration;                                           |
+| `keepAlive`        | `boolean`               | `true`                                         | Enables HTTP keep-alive for persistent connections.          |
+| `maxConnections`   | `number`                | `20`                                           | Limits the maximum number of concurrent connections.         |
+| `deserialization`  | `DeserializationConfig` | see deserialization section                    | Controls deserialization behaviour                           |
 
 #### Environment Variables
 
@@ -261,22 +262,34 @@ for await (const row of cursor.iterate(5)) {
 await cursor.close();
 ```
 
-## Handling JavaScript `BigInt` and CrateDB `LONG` Values
+## Serialization and Deserialization
 
-This library leverages modern JavaScript features — such as `JSON.rawJSON()` -
-to accurately serialize and deserialize `BigInt` values.
+The client handles serialization and deserialization of various data types,
+including `BigInt`, `Date`, and timestamps, ensuring precision and compatibility
+between JavaScript and CrateDB.
 
 - **Serialization**
-  - **BigInt to LONG:**
-    When serializing, JavaScript `BigInt` values their precision is preserved.
-    e.g. `BigInt(12345678901234567890)` is serialized as `12345678901234567890`.
+
+  - Data types such as `BigInt`, `Date`, `Set`, and `Map` are serialized into
+    compatible JSON representations without loss of precision.
+
 - **Deserialization**
-  - **Top-Level LONG Columns:**  
-    If type information is available in the result set, columns defined as CrateDB  
-    `LONG` are automatically converted to `BigInt`.
-  - **Large Integer Values:**  
-    If type information is unavailable, integers exceeding `Number.MAX_SAFE_INTEGER`
-    and without a decimal point are converted to `BigInt` on a best-effort basis.
+  - The client supports configurable deserialization for specific CrateDB data
+    types, including `LONG`, `DATE`, `TIMESTAMP`, and `TIMESTAMPTZ`.
+  - By default, when type information is available in the result set, values are
+    automatically converted to the appropriate JavaScript types.
+  - Integer values exceeding `Number.MAX_SAFE_INTEGER` are converted to
+    `BigInt`, even when explicit type information is unavailable.
+
+Deserialization behavior can be controlled through the client configuration:
+
+```typescript
+export type DeserializationConfig = {
+  long: 'bigint' | 'number';
+  timestamp: 'date' | 'number';
+  date: 'date' | 'number';
+};
+```
 
 ## License
 

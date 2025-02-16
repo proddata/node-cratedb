@@ -2,8 +2,8 @@
 import http, { AgentOptions } from 'http';
 import https from 'https';
 import { URL } from 'url';
-import { CrateDBCursor } from './CrateDBCursor.js';
-import { CrateDBSerializer } from './CrateDBSerializer.js';
+import { Cursor } from './Cursor.js';
+import { Serializer } from './Serializer.js';
 import {
   CrateDBConfig,
   CrateDBBaseResponse,
@@ -25,13 +25,18 @@ const defaultConfig: CrateDBConfig = {
   ssl: false,
   keepAlive: true, // Enable persistent connections by default
   maxConnections: 20,
+  deserialization: {
+    long: 'bigint',
+    timestamp: 'date',
+    date: 'date',
+  },
 };
 
 export class CrateDBClient {
-  public cfg: CrateDBConfig;
-  public httpAgent: http.Agent | https.Agent;
-  public protocol: 'http' | 'https';
-  public httpOptions: http.RequestOptions;
+  private cfg: CrateDBConfig;
+  private httpAgent: http.Agent | https.Agent;
+  private protocol: 'http' | 'https';
+  private httpOptions: http.RequestOptions;
 
   constructor(config = {}) {
     const cfg: CrateDBConfig = { ...defaultConfig, ...config };
@@ -85,8 +90,8 @@ export class CrateDBClient {
     };
   }
 
-  createCursor(sql: string): CrateDBCursor {
-    return new CrateDBCursor(this, sql);
+  createCursor(sql: string): Cursor {
+    return new Cursor(this, sql);
   }
 
   async *streamQuery(sql: string, batchSize: number = 100): AsyncGenerator<CrateDBRecord, void, unknown> {
@@ -115,13 +120,13 @@ export class CrateDBClient {
     return res;
   }
 
-  async _execute(
+  private async _execute(
     stmt: string,
     args: unknown[] | null = null,
     bulk_args: unknown[][] | null = null
   ): Promise<CrateDBBaseResponse> {
     const startRequestTime = Date.now();
-    const body = CrateDBSerializer.stringify(args ? { stmt, args } : { stmt, bulk_args });
+    const body = Serializer.serialize(args ? { stmt, args } : { stmt, bulk_args });
     const options = { ...this.httpOptions, body };
     const response = await this._makeRequest(options);
     const totalRequestTime = Date.now() - startRequestTime;
@@ -140,7 +145,7 @@ export class CrateDBClient {
   }
 
   // Convenience methods for common SQL operations
-  _generateInsertQuery(tableName: string, keys: string[], primaryKeys: string[] | null): string {
+  private _generateInsertQuery(tableName: string, keys: string[], primaryKeys: string[] | null): string {
     const placeholders = keys.map(() => '?').join(', ');
     let query = `INSERT INTO ${tableName} (${keys.map((key) => `"${key}"`).join(', ')}) VALUES (${placeholders})`;
 
@@ -251,7 +256,7 @@ export class CrateDBClient {
     return await this.execute(query);
   }
 
-  _prepareOptions(options: Record<string, unknown>): {
+  private _prepareOptions(options: Record<string, unknown>): {
     keys: string[];
     values: string[];
     args: unknown[];
@@ -272,7 +277,7 @@ export class CrateDBClient {
           const rawResponse = Buffer.concat(data); // Raw response data as a buffer
           const responseBodySize = rawResponse.length;
           try {
-            const parsedResponse = CrateDBSerializer.deserialize(rawResponse.toString());
+            const parsedResponse = Serializer.deserialize(rawResponse.toString(), this.cfg.deserialization);
             resolve({
               ...parsedResponse,
               sizes: { response: responseBodySize, request: requestBodySize },
@@ -296,5 +301,11 @@ export class CrateDBClient {
       req.on('error', (err) => reject(new Error(`Request failed: ${err.message}`)));
       req.end(options.body || null);
     });
+  }
+  public getConfig(): Readonly<CrateDBConfig> {
+    return this.cfg;
+  }
+  public getHttpOptions(): Readonly<http.RequestOptions> {
+    return this.httpOptions;
   }
 }

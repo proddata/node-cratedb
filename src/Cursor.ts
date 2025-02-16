@@ -3,10 +3,10 @@
 import http from 'http';
 import https from 'https';
 import { CrateDBClient } from './CrateDBClient.js';
-import { CrateDBResponse, CrateDBRecord } from './interfaces';
-import { CrateDBSerializer } from './CrateDBSerializer.js';
+import { CrateDBResponse, CrateDBRecord } from './interfaces.js';
+import { Serializer } from './Serializer.js';
 
-export class CrateDBCursor {
+export class Cursor {
   public client: CrateDBClient;
   public sql: string;
   public cursorName: string;
@@ -26,8 +26,8 @@ export class CrateDBCursor {
     };
 
     // Create a new agent with its own socket for this cursor
-    this.agent = client.cfg.ssl ? new https.Agent(agentOptions) : new http.Agent(agentOptions);
-    this.connectionOptions = { ...client.httpOptions, agent: this.agent };
+    this.agent = client.getConfig().ssl ? new https.Agent(agentOptions) : new http.Agent(agentOptions);
+    this.connectionOptions = { ...client.getHttpOptions(), agent: this.agent };
   }
 
   async open(): Promise<void> {
@@ -87,7 +87,7 @@ export class CrateDBCursor {
   }
 
   async _execute(sql: string): Promise<Array<CrateDBRecord>> {
-    const options = { ...this.connectionOptions, body: CrateDBSerializer.stringify({ stmt: sql }) };
+    const options = { ...this.connectionOptions, body: Serializer.serialize({ stmt: sql }) };
     try {
       const response: CrateDBResponse = await this.client._makeRequest(options);
       const { cols, rows, rowcount } = response;
