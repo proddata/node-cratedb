@@ -5,10 +5,9 @@
 
 This library is a lightweight Node.js client derived from `node-crate` for interacting with CrateDB via its **HTTP endpoint**. Unlike libraries such as `node-postgres`, which use the PostgreSQL wire protocol, this client communicates with CrateDB's native HTTP API.
 
-> [!CAUTION] > **This library is primarily a proof of concept.**  
+> [!CAUTION]
 > While it provides basic functionality to interact with CrateDB, it is not production-ready and lacks the robustness of established libraries.
->
-> For production use, consider mature libraries like [`node-postgres`](https://node-postgres.com/) which leverage CrateDB's PostgreSQL compatibility. Use this client only for **testing, experimentation**, or if you know what you're doing. :wink:
+> For production use, consider mature libraries like [`node-postgres`](https://node-postgres.com/) which leverage CrateDB's PostgreSQL compatibility.
 
 ## Installation
 
@@ -27,12 +26,15 @@ To use the `CrateDBClient`:
 2. Instantiate it with your configuration options.
 3. Call any of the CRUD and DDL methods provided.
 
+For a local CrateDB Instance:
+
 ```javascript
 import { CrateDBClient } from '@proddata/node-cratedb';
 
-//for local CrateDB instance
 const client = new CrateDBClient();
 ```
+
+For a remote CrateDB Instance:
 
 ```javascript
 import { CrateDBClient } from '@proddata/node-cratedb';
@@ -111,7 +113,7 @@ await client.execute('SELECT ?;', ['Hello World!']);
 Execute a raw bulk SQL query.
 
 ```js
-await client.execute('SELECT ?;', [['Hello'], ['World']]);
+await client.execute('INSERT INTO my_table VALUES(?);', [['Hello'], ['World']]);
 ```
 
 #### streamQuery(sql, batchSize)
@@ -257,21 +259,17 @@ await cursor.close();
 This library leverages modern JavaScript features — such as `JSON.rawJSON()` -
 to accurately serialize and deserialize `BigInt` values.
 
-### Serialization
-
-- **BigInt to LONG:**
-  When serializing, JavaScript `BigInt` values their precision is preserved.
-  e.g. `BigInt(12345678901234567890)` is serialized as `12345678901234567890`.
-
-### Deserialization
-
-- **Top-Level LONG Columns:**  
-  If type information is available in the result set, columns defined as CrateDB  
-  `LONG` are automatically converted to `BigInt`.
-
-- **Large Integer Values:**  
-  If type information is unavailable, integers exceeding `Number.MAX_SAFE_INTEGER`
-  and without a decimal point are converted to `BigInt` on a best-effort basis.
+- **Serialization**
+  - **BigInt to LONG:**
+    When serializing, JavaScript `BigInt` values their precision is preserved.
+    e.g. `BigInt(12345678901234567890)` is serialized as `12345678901234567890`.
+- **Deserialization**
+  - **Top-Level LONG Columns:**  
+    If type information is available in the result set, columns defined as CrateDB  
+    `LONG` are automatically converted to `BigInt`.
+  - **Large Integer Values:**  
+    If type information is unavailable, integers exceeding `Number.MAX_SAFE_INTEGER`
+    and without a decimal point are converted to `BigInt` on a best-effort basis.
 
 ## License
 
