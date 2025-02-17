@@ -89,7 +89,7 @@ export class Cursor {
   async _execute(sql: string): Promise<Array<CrateDBRecord>> {
     const options = { ...this.connectionOptions, body: Serializer.serialize({ stmt: sql }) };
     try {
-      const response: CrateDBResponse = await this.client._makeRequest(options);
+      const response: CrateDBResponse = (await this.client._makeRequest(options)) as CrateDBResponse;
       const { cols, rows, rowcount } = response;
       return rowcount && rowcount > 0 ? this._rebuildObjects(cols || [], rows as unknown[]) : [];
     } catch (error: unknown) {

@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { Serializer } from '../src/Serializer';
 import { DeserializationConfig } from '../src/interfaces';
+import { DeserializationError } from '../src/utils/Error';
 
 const bigintStr = '9223372036854775808';
 const config: DeserializationConfig = { long: 'bigint', timestamp: 'number', date: 'number' };
@@ -16,6 +17,14 @@ describe('CrateDBSerializer', () => {
     const str = `{"a":1,"b":"${bigintStr}"}`;
     const obj = Serializer.deserialize(str, config);
     expect(obj).toEqual({ a: 1, b: bigintStr });
+  });
+
+  it('should throw an error when deserialization fails', () => {
+    const str = `{"a":1,b":"${bigintStr}"}`; // Invalid JSON syntax
+
+    expect(() => {
+      Serializer.deserialize(str, config);
+    }).toThrow(DeserializationError);
   });
 
   it('should deserialize nested bigint', () => {

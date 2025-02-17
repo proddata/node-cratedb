@@ -33,16 +33,21 @@ export interface CrateDBBaseResponse {
     response: number;
   };
   error?: { code: number; message: string };
+  results?: Array<CrateDBBulkRecord>;
 }
 
 export interface CrateDBResponse extends CrateDBBaseResponse {
-  rows?: Array<Array<unknown>>;
-  rowcount?: number;
+  cols: string[];
+  col_types: number[];
+  rows: unknown[][];
+  rowcount: number;
+  duration: number;
 }
 
 export interface CrateDBBulkResponse extends CrateDBBaseResponse {
-  results?: Array<CrateDBBulkRecord>;
+  results: Array<CrateDBBulkRecord>;
   bulk_errors?: number[];
+  duration: number;
 }
 
 export interface CrateDBBulkRecord {
@@ -51,6 +56,14 @@ export interface CrateDBBulkRecord {
     code: number;
     message: string;
   };
+}
+
+export interface CrateDBErrorResponse {
+  error: {
+    message: string;
+    code: number;
+  };
+  error_trace?: string;
 }
 
 export type CrateDBRecord = Record<string, unknown>;

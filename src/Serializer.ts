@@ -1,5 +1,6 @@
-import { ColumnTypes } from './ColumnTypes.js';
+import { ColumnTypes } from './utils/ColumnTypes.js';
 import { CrateDBBaseResponse, DeserializationConfig } from './interfaces.js';
+import { DeserializationError } from './utils/Error.js';
 
 type Context = {
   source: string;
@@ -24,6 +25,14 @@ export class Serializer {
   }
 
   static deserialize(str: string, config: DeserializationConfig): CrateDBBaseResponse {
+    try {
+      return this._deserialize(str, config);
+    } catch {
+      throw new DeserializationError('Deserialization of response body failed');
+    }
+  }
+
+  private static _deserialize(str: string, config: DeserializationConfig): CrateDBBaseResponse {
     const obj = config.long === 'bigint' ? JSON.parse(str, this.reviver) : JSON.parse(str);
 
     obj.col_types?.forEach((type: number | number[], index: number) => {

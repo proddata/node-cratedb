@@ -9,9 +9,10 @@ import {
   CrateDBBaseResponse,
   CrateDBResponse,
   CrateDBBulkResponse,
-  CrateDBBulkRecord,
   CrateDBRecord,
+  CrateDBErrorResponse,
 } from './interfaces';
+import { CrateDBError, DeserializationError, RequestError } from './utils/Error.js';
 
 // Configuration options with CrateDB-specific environment variables
 const defaultConfig: CrateDBConfig = {
@@ -105,43 +106,60 @@ export class CrateDBClient {
     }
   }
 
-  async execute(stmt: string, args: unknown[] = []): Promise<CrateDBResponse> {
-    return await this._execute(stmt, args);
+  async execute(stmt: string, args?: unknown[]): Promise<CrateDBResponse> {
+    const startRequestTime = Date.now();
+    const payload = args ? { stmt, args } : { stmt };
+    let body: string;
+    try {
+      body = Serializer.serialize(payload);
+    } catch (serializationError: unknown) {
+      const msg = serializationError instanceof Error ? serializationError.message : String(serializationError);
+      throw new RequestError(`Serialization failed: ${msg}`);
+    }
+
+    const options = { ...this.httpOptions, body };
+
+    try {
+      const response = await this._makeRequest(options);
+      return this._addDurations(startRequestTime, response) as CrateDBResponse;
+    } catch (error: unknown) {
+      if (error instanceof CrateDBError || error instanceof DeserializationError) {
+        throw error;
+      } else if (error instanceof Error) {
+        throw new RequestError(`CrateDB request failed: ${error.message}`, { cause: error });
+      }
+      throw new RequestError('CrateDB request failed with an unknown error');
+    }
   }
 
   async executeMany(stmt: string, bulk_args: unknown[][]): Promise<CrateDBBulkResponse> {
-    const res: CrateDBBulkResponse = await this._execute(stmt, null, bulk_args);
-    const results: Array<CrateDBBulkRecord> = res.results || [];
-    const bulk_errors = results.map((result, i) => (result.rowcount === -2 ? i : null)).filter((i) => i !== null);
-
-    if (bulk_errors.length > 0) {
-      res.bulk_errors = bulk_errors;
-    }
-    return res;
-  }
-
-  private async _execute(
-    stmt: string,
-    args: unknown[] | null = null,
-    bulk_args: unknown[][] | null = null
-  ): Promise<CrateDBBaseResponse> {
     const startRequestTime = Date.now();
-    const body = Serializer.serialize(args ? { stmt, args } : { stmt, bulk_args });
-    const options = { ...this.httpOptions, body };
-    const response = await this._makeRequest(options);
-    const totalRequestTime = Date.now() - startRequestTime;
-    if (typeof response.duration === 'number') {
-      response.durations = {
-        cratedb: response.duration,
-        request: totalRequestTime - response.duration,
-      };
-    } else {
-      response.durations = {
-        cratedb: 0,
-        request: totalRequestTime,
-      };
+    let body: string;
+    try {
+      body = Serializer.serialize({ stmt, bulk_args });
+    } catch (serializationError: unknown) {
+      const msg = serializationError instanceof Error ? serializationError.message : String(serializationError);
+      throw new RequestError(`Serialization failed: ${msg}`);
     }
-    return response;
+
+    const options = { ...this.httpOptions, body };
+
+    try {
+      const response = await this._makeRequest(options);
+      const res = this._addDurations(startRequestTime, response) as CrateDBBulkResponse;
+      // Mark bulk errors for each result where rowcount is -2
+      res.bulk_errors = (res.results || [])
+        .map((result, i) => (result.rowcount === -2 ? i : null))
+        .filter((i) => i !== null);
+      return res;
+    } catch (error: unknown) {
+      if (error instanceof CrateDBError || error instanceof DeserializationError) {
+        throw error;
+      } else if (error instanceof Error) {
+        throw new RequestError(`CrateDB bulk request failed: ${error.message}`, { cause: error });
+      }
+      throw new RequestError('CrateDB bulk request failed with an unknown error');
+    }
   }
 
   // Convenience methods for common SQL operations
@@ -182,7 +200,7 @@ export class CrateDBClient {
     const args = Object.values(obj);
 
     // Execute the query
-    return await this.execute(query, args);
+    return this.execute(query, args);
   }
 
   async insertMany(
@@ -229,22 +247,22 @@ export class CrateDBClient {
     const { keys, values, args } = this._prepareOptions(options);
     const setClause = keys.map((key, i) => `${key}=${values[i]}`).join(', ');
     const query = `UPDATE ${tableName} SET ${setClause} WHERE ${whereClause}`;
-    return await this.execute(query, args);
+    return this.execute(query, args);
   }
 
   async delete(tableName: string, whereClause: string): Promise<CrateDBResponse> {
     const query = `DELETE FROM ${tableName} WHERE ${whereClause}`;
-    return await this.execute(query);
+    return this.execute(query);
   }
 
   async drop(tableName: string): Promise<CrateDBResponse> {
     const query = `DROP TABLE IF EXISTS ${tableName}`;
-    return await this.execute(query);
+    return this.execute(query);
   }
 
   async refresh(tableName: string): Promise<CrateDBResponse> {
     const query = `REFRESH TABLE ${tableName}`;
-    return await this.execute(query);
+    return this.execute(query);
   }
 
   async createTable(schema: Record<string, Record<string, string>>): Promise<CrateDBResponse> {
@@ -253,7 +271,7 @@ export class CrateDBClient {
       .map(([col, type]) => `"${col}" ${type}`)
       .join(', ');
     const query = `CREATE TABLE ${tableName} (${columns})`;
-    return await this.execute(query);
+    return this.execute(query);
   }
 
   private _prepareOptions(options: Record<string, unknown>): {
@@ -267,6 +285,22 @@ export class CrateDBClient {
     return { keys, values, args };
   }
 
+  private _addDurations(startRequestTime: number, response: CrateDBBaseResponse): CrateDBBaseResponse {
+    const totalRequestTime = Date.now() - startRequestTime;
+    if (typeof response.duration === 'number') {
+      response.durations = {
+        cratedb: response.duration,
+        request: totalRequestTime - response.duration,
+      };
+    } else {
+      response.durations = {
+        cratedb: 0,
+        request: totalRequestTime,
+      };
+    }
+    return response;
+  }
+
   async _makeRequest(options: http.RequestOptions & { body?: string }): Promise<CrateDBBaseResponse> {
     return new Promise((resolve, reject) => {
       const requestBodySize = options.body ? Buffer.byteLength(options.body) : 0;
@@ -276,18 +310,19 @@ export class CrateDBClient {
         response.on('end', () => {
           const rawResponse = Buffer.concat(data); // Raw response data as a buffer
           const responseBodySize = rawResponse.length;
+
           try {
             const parsedResponse = Serializer.deserialize(rawResponse.toString(), this.cfg.deserialization);
-            resolve({
-              ...parsedResponse,
-              sizes: { response: responseBodySize, request: requestBodySize },
-            });
-          } catch (parseErr: unknown) {
-            if (response.statusCode === 401) {
-              reject(new Error('Authentication error: Invalid credentials or insufficient permissions.'));
-            } else if (response.statusCode === 503) {
-              reject(new Error('Service unavailable: server is not available (503).'));
+            if (response.statusCode === 200) {
+              resolve({
+                ...parsedResponse,
+                sizes: { response: responseBodySize, request: requestBodySize },
+              });
+            } else {
+              reject(CrateDBError.fromResponse(parsedResponse as CrateDBErrorResponse, response.statusCode));
             }
+          } catch (parseErr: unknown) {
+            // Handle parsing errors
             if (parseErr instanceof Error) {
               reject(
                 new Error(`Failed to parse response: ${parseErr.message}. Raw response: ${rawResponse.toString()}`)
@@ -302,6 +337,7 @@ export class CrateDBClient {
       req.end(options.body || null);
     });
   }
+
   public getConfig(): Readonly<CrateDBConfig> {
     return this.cfg;
   }
