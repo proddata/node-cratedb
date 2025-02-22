@@ -40,13 +40,13 @@ export class Cursor {
     this.isOpen = true;
   }
 
-  async fetchone(): Promise<CrateDBRecord | null> {
+  async fetchOne(): Promise<CrateDBRecord | null> {
     this._ensureOpen();
     const result = await this._execute(`FETCH NEXT FROM ${this.cursorName}`);
     return result.length > 0 ? result[0] : null; // Return the first row or null
   }
 
-  async fetchmany(size = 10): Promise<Array<CrateDBRecord>> {
+  async fetchMany(size = 10): Promise<Array<CrateDBRecord>> {
     if (size < 1) {
       // Return an empty array if size is less than 1
       return [];
@@ -55,7 +55,7 @@ export class Cursor {
     return await this._execute(`FETCH ${size} FROM ${this.cursorName}`);
   }
 
-  async fetchall(): Promise<Array<CrateDBRecord>> {
+  async fetchAll(): Promise<Array<CrateDBRecord>> {
     this._ensureOpen();
     return await this._execute(`FETCH ALL FROM ${this.cursorName}`);
   }
@@ -64,7 +64,7 @@ export class Cursor {
     this._ensureOpen();
 
     while (true) {
-      const rows = await this.fetchmany(size);
+      const rows = await this.fetchMany(size);
 
       if (!rows || rows.length === 0) {
         break; // Stop iteration when no more rows are returned

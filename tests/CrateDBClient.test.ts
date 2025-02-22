@@ -126,11 +126,9 @@ describe('CrateDBClient Integration Tests', () => {
   describe('Upsert and Insert Operations', () => {
     it('should handle upsert conflicts correctly when inserting data', async () => {
       const tableName = 'my_schema.insert_test';
-      await client.createTable({
-        [tableName]: {
-          id: 'INT PRIMARY KEY',
-          name: 'TEXT',
-        },
+      await client.createTable(tableName, {
+        id: { type: 'INT', primaryKey: true },
+        name: { type: 'TEXT' },
       });
       // Initial insert
       await client.insert(tableName, { id: 1, name: 'test' }, ['id']);
@@ -147,11 +145,9 @@ describe('CrateDBClient Integration Tests', () => {
 
     it('should ignore updates when primary keys are not provided in bulk insert', async () => {
       const tableName = 'my_schema.no_primary_key_test';
-      await client.createTable({
-        [tableName]: {
-          id: 'INT PRIMARY KEY',
-          name: 'TEXT',
-        },
+      await client.createTable(tableName, {
+        id: { type: 'INT PRIMARY KEY' },
+        name: { type: 'TEXT' },
       });
 
       const initialData = [
@@ -183,11 +179,10 @@ describe('CrateDBClient Integration Tests', () => {
   describe('Bulk Insert Operations', () => {
     it('should insert and query bulk data', async () => {
       const tableName = 'my_schema.bulk_insert_test';
-      await client.createTable({
-        [tableName]: {
-          id: 'INT PRIMARY KEY',
-          name: 'TEXT',
-        },
+      //const tableName = 'bulk_insert_test';
+      await client.createTable(tableName, {
+        id: { type: 'INT', primaryKey: true },
+        name: { type: 'TEXT' },
       });
 
       const insertStatement = `INSERT INTO ${tableName} (id, name) VALUES (?, ?)`;
@@ -210,12 +205,10 @@ describe('CrateDBClient Integration Tests', () => {
 
     it('should handle primary key conflicts during bulk insert', async () => {
       const tableName = 'my_schema.primary_key_test';
-      await client.createTable({
-        [tableName]: {
-          id: 'INT PRIMARY KEY',
-          name: 'TEXT',
-          description: 'TEXT',
-        },
+      await client.createTable(tableName, {
+        id: { type: 'INT PRIMARY KEY' },
+        name: { type: 'TEXT' },
+        description: { type: 'TEXT' },
       });
 
       const initialData = [
@@ -242,13 +235,11 @@ describe('CrateDBClient Integration Tests', () => {
 
     it('should perform and validate a bulk insert', async () => {
       const tableName = 'my_schema.bulk_table';
-      await client.createTable({
-        [tableName]: {
-          id: 'INT PRIMARY KEY',
-          name: 'TEXT',
-          kind: 'TEXT',
-          description: 'TEXT',
-        },
+      await client.createTable(tableName, {
+        id: { type: 'INT PRIMARY KEY' },
+        name: { type: 'TEXT' },
+        kind: { type: 'TEXT' },
+        description: { type: 'TEXT' },
       });
 
       const jsonArray = [
@@ -276,12 +267,10 @@ describe('CrateDBClient Integration Tests', () => {
   describe('Cursor and Streaming', () => {
     it('should stream query results and validate them', async () => {
       const tableName = 'stream_test_table';
-      await client.createTable({
-        [tableName]: {
-          id: 'INT PRIMARY KEY',
-          name: 'TEXT',
-          value: 'TEXT',
-        },
+      await client.createTable(tableName, {
+        id: { type: 'INT PRIMARY KEY' },
+        name: { type: 'TEXT' },
+        value: { type: 'TEXT' },
       });
 
       const testData = [

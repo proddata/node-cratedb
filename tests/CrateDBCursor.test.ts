@@ -2,6 +2,7 @@ import { describe, it, beforeAll, afterAll, expect } from 'vitest';
 import { GenericContainer } from 'testcontainers';
 import { CrateDBClient } from '../src/CrateDBClient';
 import { CrateDBRecord } from '../src/interfaces';
+import { table } from 'console';
 
 describe('CrateDBCursor', () => {
   let container;
@@ -45,11 +46,9 @@ describe('CrateDBCursor', () => {
   it('should create a cursor, fetch rows as objects, and close it', async () => {
     const tableName = `my_table_${Date.now()}`;
 
-    await client.createTable({
-      [tableName]: {
-        id: 'INT PRIMARY KEY',
-        name: 'TEXT',
-      },
+    await client.createTable(tableName, {
+      id: { type: 'integer', primaryKey: true },
+      name: { type: 'text', notNull: true },
     });
 
     await client.insert(tableName, { id: 1, name: 'Alice' });
@@ -64,28 +63,28 @@ describe('CrateDBCursor', () => {
     try {
       await cursor.open();
 
-      const firstRow = await cursor.fetchone();
+      const firstRow = await cursor.fetchOne();
       expect(firstRow).toEqual({ id: 1, name: 'Alice' });
 
-      const fetchTwoRows = await cursor.fetchmany(2);
+      const fetchTwoRows = await cursor.fetchMany(2);
       expect(fetchTwoRows).toEqual([
         { id: 2, name: 'Bob' },
         { id: 3, name: 'Charlie' },
       ]);
 
-      const fetchNoRows = await cursor.fetchmany(0);
+      const fetchNoRows = await cursor.fetchMany(0);
       expect(fetchNoRows).toEqual([]);
 
-      const remainingRows = await cursor.fetchall();
+      const remainingRows = await cursor.fetchAll();
       expect(remainingRows).toEqual([{ id: 4, name: 'David' }]);
 
-      const noMoreRows = await cursor.fetchone();
+      const noMoreRows = await cursor.fetchOne();
       expect(noMoreRows).toBeNull();
 
-      const noMoreRowsMany = await cursor.fetchmany(2);
+      const noMoreRowsMany = await cursor.fetchMany(2);
       expect(noMoreRowsMany).toEqual([]);
 
-      const noMoreRowsAll = await cursor.fetchall();
+      const noMoreRowsAll = await cursor.fetchAll();
       expect(noMoreRowsAll).toEqual([]);
     } finally {
       await cursor.close();
@@ -97,12 +96,10 @@ describe('CrateDBCursor', () => {
     const tableName = 'test_table';
 
     // Create the table and insert test data
-    await client.createTable({
-      [tableName]: {
-        id: 'INT PRIMARY KEY',
-        name: 'TEXT',
-        value: 'TEXT',
-      },
+    await client.createTable(tableName, {
+      id: { type: 'integer', primaryKey: true },
+      name: { type: 'text', notNull: true },
+      value: { type: 'text', notNull: true },
     });
 
     const testData = [

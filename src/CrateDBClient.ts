@@ -11,8 +11,12 @@ import {
   CrateDBBulkResponse,
   CrateDBRecord,
   CrateDBErrorResponse,
+  OptimizeOptions,
+  ColumnDefinition,
+  TableOptions,
 } from './interfaces';
 import { CrateDBError, DeserializationError, RequestError } from './utils/Error.js';
+import { StatementGenerator } from './StatementGenerator.js';
 
 // Configuration options with CrateDB-specific environment variables
 const defaultConfig: CrateDBConfig = {
@@ -162,23 +166,6 @@ export class CrateDBClient {
     }
   }
 
-  // Convenience methods for common SQL operations
-  private _generateInsertQuery(tableName: string, keys: string[], primaryKeys: string[] | null): string {
-    const placeholders = keys.map(() => '?').join(', ');
-    let query = `INSERT INTO ${tableName} (${keys.map((key) => `"${key}"`).join(', ')}) VALUES (${placeholders})`;
-
-    if (primaryKeys && primaryKeys.length > 0) {
-      const keysWithoutPrimary = keys.filter((key) => !primaryKeys.includes(key));
-      const updates = keysWithoutPrimary.map((key) => `"${key}" = excluded."${key}"`).join(', ');
-      query += ` ON CONFLICT (${primaryKeys.map((key) => `"${key}"`).join(', ')}) DO UPDATE SET ${updates}`;
-    } else {
-      query += ' ON CONFLICT DO NOTHING';
-    }
-
-    query += ';'; // Ensure the query ends with a semicolon
-    return query;
-  }
-
   async insert(
     tableName: string,
     obj: Record<string, unknown>,
@@ -196,7 +183,7 @@ export class CrateDBClient {
     }
 
     const keys = Object.keys(obj);
-    const query = this._generateInsertQuery(tableName, keys, primaryKeys);
+    const query = StatementGenerator.insert(tableName, keys, primaryKeys);
     const args = Object.values(obj);
 
     // Execute the query
@@ -233,7 +220,7 @@ export class CrateDBClient {
       uniqueKeys.map((key) => (Object.prototype.hasOwnProperty.call(obj, key) ? obj[key] : null))
     );
 
-    const query = this._generateInsertQuery(tableName, uniqueKeys, primaryKeys);
+    const query = StatementGenerator.insert(tableName, uniqueKeys, primaryKeys);
 
     // Execute the query with bulk arguments
     const response = await this.executeMany(query, bulkArgs);
@@ -245,32 +232,69 @@ export class CrateDBClient {
 
   async update(tableName: string, options: Record<string, unknown>, whereClause: string): Promise<CrateDBResponse> {
     const { keys, values, args } = this._prepareOptions(options);
-    const setClause = keys.map((key, i) => `${key}=${values[i]}`).join(', ');
-    const query = `UPDATE ${tableName} SET ${setClause} WHERE ${whereClause}`;
+    const query = StatementGenerator.update(tableName, options, whereClause);
     return this.execute(query, args);
   }
 
   async delete(tableName: string, whereClause: string): Promise<CrateDBResponse> {
-    const query = `DELETE FROM ${tableName} WHERE ${whereClause}`;
+    const query = StatementGenerator.delete(tableName, whereClause);
     return this.execute(query);
   }
 
+  /**
+   * Drops a table if it exists in CrateDB.
+   *
+   * Constructs and executes a `DROP TABLE IF EXISTS` SQL statement.
+   *
+   * @param {string} tableName - The name of the table to drop.
+   * @returns {Promise<CrateDBResponse>} A promise resolving to the response from CrateDB.
+   */
   async drop(tableName: string): Promise<CrateDBResponse> {
-    const query = `DROP TABLE IF EXISTS ${tableName}`;
+    const query = StatementGenerator.dropTable(tableName);
     return this.execute(query);
   }
 
+  async createTable(
+    tableName: string,
+    schema: Record<string, ColumnDefinition>,
+    options?: TableOptions
+  ): Promise<CrateDBResponse> {
+    const query = StatementGenerator.createTable(tableName, schema, options);
+    return this.execute(query);
+  }
+
+  /**
+   * Refreshes a given table by refreshing it in CrateDB.
+   *
+   * The `REFRESH TABLE` command makes recently committed changes available for querying
+   * without waiting for automatic refresh intervals.
+   *
+   * @param {string} tableName - The name of the table to refresh.
+   * @returns {Promise<CrateDBResponse>} A promise resolving to the response from CrateDB.
+   */
   async refresh(tableName: string): Promise<CrateDBResponse> {
-    const query = `REFRESH TABLE ${tableName}`;
+    const query = StatementGenerator.refresh(tableName);
     return this.execute(query);
   }
 
-  async createTable(schema: Record<string, Record<string, string>>): Promise<CrateDBResponse> {
-    const tableName = Object.keys(schema)[0];
-    const columns = Object.entries(schema[tableName])
-      .map(([col, type]) => `"${col}" ${type}`)
-      .join(', ');
-    const query = `CREATE TABLE ${tableName} (${columns})`;
+  /**
+   * Optimizes a given table or specific partitions in CrateDB by merging table segments.
+   *
+   * The `OPTIMIZE TABLE` command reduces the number of segments in a table, improving
+   * query performance and reducing storage overhead. It supports optimizing the entire table
+   * or specific partitions and allows additional optimization parameters.
+   *
+   * @param {string} tableName - The name of the table to optimize.
+   * @param {OptimizeOptions} [options] - Optional parameters for table optimization.
+   * @param {Record<string, string | number>} [partitions] - Optional key-value pairs specifying partition columns and values.
+   * @returns {Promise<CrateDBResponse>} A promise resolving to the response from CrateDB.
+   */
+  async optimize(
+    tableName: string,
+    options?: OptimizeOptions,
+    partitions?: Record<string, string | number>
+  ): Promise<CrateDBResponse> {
+    const query = StatementGenerator.optimize(tableName, options, partitions);
     return this.execute(query);
   }
 

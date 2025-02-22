@@ -67,3 +67,29 @@ export interface CrateDBErrorResponse {
 }
 
 export type CrateDBRecord = Record<string, unknown>;
+
+export type OptimizeOptions = {
+  max_num_segments?: number; // Defines the number of segments to merge to
+  only_expunge_deletes?: boolean; // If true, only segments with deletes are merged
+  flush?: boolean; // If false, prevents automatic flushing after optimization
+};
+
+/**
+ * Defines the structure of a column in a CrateDB table.
+ */
+export type ColumnDefinition = {
+  type: string;
+  primaryKey?: boolean;
+  notNull?: boolean;
+  defaultValue?: unknown;
+};
+
+/**
+ * Defines additional table options such as clustering, partitioning, and replicas.
+ */
+export type TableOptions = {
+  clusteredBy?: string; // Column to cluster by
+  partitionedBy?: string[]; // List of partition key columns
+  numberOfShards?: number; // Replication factor
+  numberOfReplicas?: string | number; // Replication factor
+};
