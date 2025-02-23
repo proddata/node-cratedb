@@ -14,6 +14,7 @@ import {
   OptimizeOptions,
   ColumnDefinition,
   TableOptions,
+  QueryConfig,
 } from './interfaces';
 import { CrateDBError, DeserializationError, RequestError } from './utils/Error.js';
 import { StatementGenerator } from './StatementGenerator.js';
@@ -25,16 +26,17 @@ const defaultConfig: CrateDBConfig = {
   jwt: null, // JWT token for Bearer authentication
   host: process.env.CRATEDB_HOST || 'localhost',
   port: process.env.CRATEDB_PORT ? parseInt(process.env.CRATEDB_PORT, 10) : 4200, // Default CrateDB port
-  defaultSchema: process.env.CRATEDB_DEFAULT_SCHEMA || null, // Default schema for queries
   connectionString: null,
   ssl: false,
+  defaultSchema: process.env.CRATEDB_DEFAULT_SCHEMA || null, // Default schema for queries
   keepAlive: true, // Enable persistent connections by default
   maxConnections: 20,
   deserialization: {
-    long: 'bigint',
+    long: 'number',
     timestamp: 'date',
     date: 'date',
   },
+  rowMode: 'array',
 };
 
 export class CrateDBClient {
@@ -110,7 +112,7 @@ export class CrateDBClient {
     }
   }
 
-  async execute(stmt: string, args?: unknown[]): Promise<CrateDBResponse> {
+  async execute(stmt: string, args?: unknown[], config?: QueryConfig): Promise<CrateDBResponse> {
     const startRequestTime = Date.now();
     const payload = args ? { stmt, args } : { stmt };
     let body: string;
@@ -121,11 +123,16 @@ export class CrateDBClient {
       throw new RequestError(`Serialization failed: ${msg}`);
     }
 
-    const options = { ...this.httpOptions, body };
+    const options = {
+      ...this.httpOptions,
+      ...config?.httpOptions,
+      body,
+    };
 
     try {
       const response = await this._makeRequest(options);
-      return this._addDurations(startRequestTime, response) as CrateDBResponse;
+      const transformedResponse = this._transformResponse(response, config?.rowMode ?? this.cfg.rowMode);
+      return this._addDurations(startRequestTime, transformedResponse) as CrateDBResponse;
     } catch (error: unknown) {
       if (error instanceof CrateDBError || error instanceof DeserializationError) {
         throw error;
@@ -231,7 +238,7 @@ export class CrateDBClient {
   }
 
   async update(tableName: string, options: Record<string, unknown>, whereClause: string): Promise<CrateDBResponse> {
-    const { keys, values, args } = this._prepareOptions(options);
+    const { args } = this._prepareOptions(options);
     const query = StatementGenerator.update(tableName, options, whereClause);
     return this.execute(query, args);
   }
@@ -360,6 +367,41 @@ export class CrateDBClient {
       req.on('error', (err) => reject(new Error(`Request failed: ${err.message}`)));
       req.end(options.body || null);
     });
+  }
+
+  protected _transformResponse(
+    response: CrateDBBaseResponse,
+    rowMode: 'array' | 'object' = 'object'
+  ): CrateDBBaseResponse {
+    // Return early if not transforming to object mode
+    if (rowMode !== 'object') {
+      return response;
+    }
+
+    // Create a shallow copy of the response
+    const transformedResponse = { ...response };
+
+    // Only transform if we have both rows and column names
+    if (Array.isArray(transformedResponse.rows) && Array.isArray(transformedResponse.cols)) {
+      transformedResponse.rows = transformedResponse.rows.map((row) => {
+        // Skip transformation if row is null or not an array
+        if (!Array.isArray(row)) {
+          return row;
+        }
+
+        const obj: Record<string, unknown> = {};
+        transformedResponse.cols?.forEach((col, index) => {
+          // Only set property if column name is a string
+          if (typeof col === 'string') {
+            // Preserve null/undefined values
+            obj[col] = row[index];
+          }
+        });
+        return obj;
+      });
+    }
+
+    return transformedResponse;
   }
 
   public getConfig(): Readonly<CrateDBConfig> {

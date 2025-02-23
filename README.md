@@ -76,18 +76,21 @@ The `CrateDBClient` can be configured with either environment variables or direc
 
 #### Configuration Options
 
-| Option             | Type                    | Default Value                                  | Description                                                  |
-| ------------------ | ----------------------- | ---------------------------------------------- | ------------------------------------------------------------ |
-| `user`             | `string`                | `'crate'` or `process.env.CRATEDB_USER`        | Database user.                                               |
-| `password`         | `string` or `null`      | `''` or `process.env.CRATEDB_PASSWORD`         | Database password.                                           |
-| `host`             | `string`                | `'localhost'` or `process.env.CRATEDB_HOST`    | Database host.                                               |
-| `port`             | `number`                | `4200` or `process.env.CRATEDB_PORT`           | Database port.                                               |
-| `defaultSchema`    | `string`                | `null` or `process.env.CRATEDB_DEFAULT_SCHEMA` | Default schema for queries.                                  |
-| `connectionString` | `string`                | `null`                                         | Connection string, e.g., `https://user:password@host:port/`. |
-| `ssl`              | `object` or `null`      | `null`                                         | SSL configuration;                                           |
-| `keepAlive`        | `boolean`               | `true`                                         | Enables HTTP keep-alive for persistent connections.          |
-| `maxConnections`   | `number`                | `20`                                           | Limits the maximum number of concurrent connections.         |
-| `deserialization`  | `DeserializationConfig` | see deserialization section                    | Controls deserialization behaviour                           |
+| Option     | Type               | Default Value                           | Description                          |
+| ---------- | ------------------ | --------------------------------------- | ------------------------------------ |
+| `user`     | `string`           | `'crate'` or `process.env.CRATEDB_USER` | Database user.                       |
+| `password` | `string` or `null` | `''` or `process.env.CRATEDB_PASSWORD`  | Database password.                   |
+| `jwt`      | `string \| null`   | `null`                                  | JWT token for Bearer authentication. |
+
+| `host` | `string` | `'localhost'` or `process.env.CRATEDB_HOST` | Database host. |
+| `port` | `number` | `4200` or `process.env.CRATEDB_PORT` | Database port. |
+| `defaultSchema` | `string` | `null` or `process.env.CRATEDB_DEFAULT_SCHEMA` | Default schema for queries. |
+| `connectionString` | `string` | `null` | Connection string, e.g., `https://user:password@host:port/`. |
+| `ssl` | `object` or `null` | `null` | SSL configuration; |
+| `keepAlive` | `boolean` | `true` | Enables HTTP keep-alive for persistent connections. |
+| `maxConnections` | `number` | `20` | Limits the maximum number of concurrent connections. |
+| `deserialization` | `DeserializationConfig` | `{ long: 'number', timestamp: 'date', date: 'date' }` | Controls deserialization behaviour |
+| `rowMode` | `'array' \| 'object'` | `'array'` | Controls the format of returned rows. |
 
 #### Environment Variables
 
@@ -107,13 +110,34 @@ export CRATEDB_DEFAULT_SCHEMA=doc
 
 ### General Operations
 
-#### execute(sql, [args])
+#### execute(sql, args?, config?)
 
-Execute a raw SQL query.
+Execute a SQL query with optional parameters and configuration.
 
-```js
+```typescript
+// Basic query
 await client.execute('SELECT * FROM my_table';);
-await client.execute('SELECT ?;', ['Hello World!']);
+// Parameterized query
+await client.execute('SELECT FROM my_table WHERE id = ?', [123]);
+// Query with row mode configuration
+await client.execute('SELECT FROM my_table', undefined, { rowMode: 'object' });
+```
+
+The `rowMode` configuration determines how rows are returned:
+
+- `'array'` (default): Returns rows as arrays of values
+- `'object'`: Returns rows as objects with column names as keys
+
+Example responses:
+
+```typescript
+// Basic query
+const result = await client.execute('SELECT * FROM my_table');
+console.log(result.rows); // [[1, 'Alice', 30], [2, 'Bob', 25]]
+
+// Query with row mode configuration
+const result = await client.execute('SELECT * FROM my_table', undefined, { rowMode: 'object' });
+console.log(result.rows); // [{id: 1, name: 'Alice', age: 30}, {id: 2, name: 'Bob', age: 25}]
 ```
 
 #### executeMany(sql, bulk_args)

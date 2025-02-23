@@ -1,3 +1,5 @@
+import type { RequestOptions } from 'http';
+
 export interface CrateDBConfig {
   user: string;
   password: string;
@@ -10,6 +12,7 @@ export interface CrateDBConfig {
   keepAlive: boolean;
   maxConnections: number;
   deserialization: DeserializationConfig;
+  rowMode?: 'array' | 'object';
 }
 
 export type DeserializationConfig = {
@@ -18,11 +21,17 @@ export type DeserializationConfig = {
   date: 'date' | 'number';
 };
 
+export type QueryConfig = {
+  rowMode?: 'array' | 'object';
+  httpOptions?: RequestOptions;
+};
+
 export interface CrateDBBaseResponse {
+  rows?: unknown[];
   cols?: string[];
   col_types?: number[];
-  rows?: Array<Array<unknown>>;
   duration?: number;
+  rowcount?: number;
   durations: {
     cratedb?: number;
     request: number;

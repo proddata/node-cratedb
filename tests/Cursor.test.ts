@@ -2,7 +2,6 @@ import { describe, it, beforeAll, afterAll, expect } from 'vitest';
 import { GenericContainer } from 'testcontainers';
 import { CrateDBClient } from '../src/CrateDBClient';
 import { CrateDBRecord } from '../src/interfaces';
-import { table } from 'console';
 
 describe('CrateDBCursor', () => {
   let container;

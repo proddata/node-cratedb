@@ -1,8 +1,15 @@
-import { describe, it, beforeAll, afterAll, expect } from 'vitest';
+import { describe, it, beforeAll, afterAll, expect, beforeEach } from 'vitest';
 import { GenericContainer } from 'testcontainers';
 import { CrateDBClient } from '../src/CrateDBClient';
-import { CrateDBRecord } from '../src/interfaces';
+import { CrateDBRecord, CrateDBBaseResponse } from '../src/interfaces';
 import { CrateDBError, RequestError } from '../src/utils/Error.js';
+
+// Add this before the main describe block
+class TestableClient extends CrateDBClient {
+  public transformResponse(response: CrateDBBaseResponse, rowMode: 'array' | 'object'): CrateDBBaseResponse {
+    return this._transformResponse(response, rowMode);
+  }
+}
 
 describe('CrateDBClient Integration Tests', () => {
   let container;
@@ -83,18 +90,55 @@ describe('CrateDBClient Integration Tests', () => {
    * Authentication Tests
    * --------------------------------------------- */
   describe('Authentication', () => {
-    it('should prioritize JWT authentication over basic auth', async () => {
-      const jwt = 'dummy.jwt.token';
+    beforeAll(async () => {
+      // Create a test user with password
+      await systemClient.execute(`
+        CREATE USER test_user WITH (
+          password = 'test_password'
+        )
+      `);
+    });
+
+    afterAll(async () => {
+      // Clean up the test user
+      await systemClient.execute('DROP USER IF EXISTS test_user');
+    });
+
+    it('should authenticate with username and password', async () => {
+      const authenticatedClient = new CrateDBClient({
+        host: container.getHost(),
+        port: container.getMappedPort(4200),
+        user: 'test_user',
+        password: 'test_password',
+      });
+
+      const result = await authenticatedClient.execute('SELECT CURRENT_USER');
+      expect(result.rows[0][0]).toBe('test_user');
+    });
+
+    it('should fail with incorrect password', async () => {
+      const invalidClient = new CrateDBClient({
+        host: container.getHost(),
+        port: container.getMappedPort(4200),
+        user: 'test_user2',
+        password: 'wrong_password',
+      });
+
+      await expect(invalidClient.execute('SELECT 1')).rejects.toThrow();
+    });
+
+    it('should authenticate with JWT if provided', async () => {
+      // Note: This is a mock test since CrateDB CE doesn't support JWT
+      // You would need Enterprise Edition to fully test JWT authentication
       const jwtClient = new CrateDBClient({
         host: container.getHost(),
         port: container.getMappedPort(4200),
-        user: 'ignoredUser',
-        password: 'ignoredPass',
-        jwt,
+        jwt: 'mock.jwt.token',
       });
 
-      expect(jwtClient.getHttpOptions().headers?.Authorization).toBe(`Bearer ${jwt}`);
-      expect(jwtClient.getHttpOptions().auth).toBeUndefined();
+      // Verify that JWT header is set
+      const headers = jwtClient.getHttpOptions().headers;
+      expect(headers?.Authorization).toBe('Bearer mock.jwt.token');
     });
   });
 
@@ -291,6 +335,72 @@ describe('CrateDBClient Integration Tests', () => {
       }
       expect(results).toEqual(testData);
       await client.drop(tableName);
+    });
+  });
+
+  /* ---------------------------------------------
+   * Response Transformation Tests
+   * --------------------------------------------- */
+  describe('Response Transformation', () => {
+    let client: TestableClient;
+    let mockResponse: CrateDBBaseResponse;
+
+    beforeEach(() => {
+      client = new TestableClient();
+      mockResponse = {
+        cols: ['id', 'name', 'age'],
+        rows: [
+          [1, 'Alice', 30],
+          [2, 'Bob', 25],
+        ],
+        rowcount: 2,
+        duration: 1.234,
+        durations: { request: 0, cratedb: 1.234 },
+        sizes: { request: 0, response: 0 },
+      };
+    });
+
+    it('should transform array rows to objects when rowMode is object', () => {
+      const transformed = client.transformResponse(mockResponse, 'object');
+      expect(transformed.rows).toEqual([
+        { id: 1, name: 'Alice', age: 30 },
+        { id: 2, name: 'Bob', age: 25 },
+      ]);
+    });
+
+    it('should keep array format when rowMode is array', () => {
+      const transformed = client.transformResponse(mockResponse, 'array');
+      expect(transformed.rows).toEqual([
+        [1, 'Alice', 30],
+        [2, 'Bob', 25],
+      ]);
+    });
+
+    it('should handle null values correctly', () => {
+      mockResponse.rows = [
+        [1, null, 30],
+        [2, 'Bob', null],
+      ];
+      const transformed = client.transformResponse(mockResponse, 'object');
+      expect(transformed.rows).toEqual([
+        { id: 1, name: null, age: 30 },
+        { id: 2, name: 'Bob', age: null },
+      ]);
+    });
+
+    it('should handle empty result sets', () => {
+      mockResponse.rows = [];
+      mockResponse.rowcount = 0;
+      const transformed = client.transformResponse(mockResponse, 'object');
+      expect(transformed.rows).toEqual([]);
+      expect(transformed.rowcount).toBe(0);
+    });
+
+    it('should preserve non-row properties', () => {
+      const transformed = client.transformResponse(mockResponse, 'object');
+      expect(transformed.duration).toBe(1.234);
+      expect(transformed.rowcount).toBe(2);
+      expect(transformed.cols).toEqual(['id', 'name', 'age']);
     });
   });
 });

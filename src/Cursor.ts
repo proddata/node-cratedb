@@ -3,8 +3,8 @@
 import http from 'http';
 import https from 'https';
 import { CrateDBClient } from './CrateDBClient.js';
-import { CrateDBResponse, CrateDBRecord } from './interfaces.js';
-import { Serializer } from './Serializer.js';
+import { CrateDBRecord } from './interfaces.js';
+import { CrateDBError, RequestError } from './utils/Error.js';
 
 export class Cursor {
   public client: CrateDBClient;
@@ -12,22 +12,25 @@ export class Cursor {
   public cursorName: string;
   public isOpen: boolean;
   public agent: http.Agent | https.Agent;
-  public connectionOptions: http.RequestOptions;
+  private cursorOptions: http.RequestOptions;
 
   constructor(client: CrateDBClient, sql: string) {
-    this.client = client; // Reference to the CrateDBClient instance
-    this.sql = sql; // The SQL statement for the cursor
-    this.cursorName = `cursor_${Date.now()}`; // Unique cursor name
-    this.isOpen = false; // Cursor state
+    this.client = client;
+    this.sql = sql;
+    this.cursorName = `cursor_${Date.now()}`;
+    this.isOpen = false;
 
     const agentOptions = {
       keepAlive: true,
       maxSockets: 1,
     };
 
-    // Create a new agent with its own socket for this cursor
     this.agent = client.getConfig().ssl ? new https.Agent(agentOptions) : new http.Agent(agentOptions);
-    this.connectionOptions = { ...client.getHttpOptions(), agent: this.agent };
+
+    this.cursorOptions = {
+      ...client.getHttpOptions(),
+      agent: this.agent,
+    };
   }
 
   async open(): Promise<void> {
@@ -87,16 +90,24 @@ export class Cursor {
   }
 
   async _execute(sql: string): Promise<Array<CrateDBRecord>> {
-    const options = { ...this.connectionOptions, body: Serializer.serialize({ stmt: sql }) };
     try {
-      const response: CrateDBResponse = (await this.client._makeRequest(options)) as CrateDBResponse;
-      const { cols, rows, rowcount } = response;
-      return rowcount && rowcount > 0 ? this._rebuildObjects(cols || [], rows as unknown[]) : [];
-    } catch (error: unknown) {
-      if (error instanceof Error) {
-        throw new Error(`Error executing SQL: ${sql}. Details: ${error.message}`);
+      const response = await this.client.execute(sql, undefined, {
+        rowMode: 'object',
+        httpOptions: this.cursorOptions,
+      });
+
+      if (!response.rows || !response.rowcount) {
+        return [];
       }
-      throw error;
+
+      return response.rows as unknown as Array<Record<string, unknown>>;
+    } catch (error) {
+      if (error instanceof CrateDBError) {
+        throw error;
+      } else if (error instanceof Error) {
+        throw new RequestError(`Error executing SQL: ${sql}. Details: ${error.message}`, { cause: error });
+      }
+      throw new RequestError('CrateDB request failed with an unknown error');
     }
   }
 

@@ -25,7 +25,9 @@
     "lint": "eslint 'src/**/*.{ts,tsx}' 'tests/**/*.{ts,tsx}'",
     "test": "vitest",
     "test:watch": "vitest --watch",
-    "ci": "npm run check-format && npm run lint && npm test && npm run build"
+    "ci": "npm run check-format && npm run lint && npm test && npm run build",
+    "release": "npm run ci && npm version",
+    "postrelease": "git push && git push --tags && npm publish"
   },
   "repository": {
     "type": "git",
