@@ -183,12 +183,12 @@ await client.insert('my_table', { id: 1, column1: 'value1', column2: 'value2' },
 await client.insert('my_table', { id: 1, column1: 'value1', column2: 'value2' });
 ```
 
-#### insertMany(tableName, jsonArray, primaryKeys = null)
+#### insertMany(tableName, objectArray, primaryKeys = null)
 
 Insert multiple rows into a table with optional primary key conflict resolution.
 
 - **`tableName`**: The name of the table to insert rows into.
-- **`jsonArray`**: An array of objects representing rows to insert.
+- **`objectArray`**: An array of objects representing rows to insert.
 - **`primaryKeys`**: (Optional) An array of column names to use as primary keys for conflict resolution.
 
 If `primaryKeys` are provided, the method will handle conflicts by updating the non-primary key fields of conflicting rows. If no `primaryKeys` are provided, conflicting rows will be skipped.
@@ -207,20 +207,17 @@ await client.insertMany('my_table', bulkData);
 // Conflicting rows will be skipped as no `primaryKeys` are provided.
 ```
 
-#### update(tableName, options, whereClause)
+#### getPrimaryKeys(tableName)
 
-Update rows in a table that match a WHERE clause.
-
-```js
-await client.update('my_table', { column1: 'new_value' }, 'column2 = value2');
-```
-
-#### delete(tableName, whereClause)
-
-Delete rows from a table that match a WHERE clause.
+Get the primary key columns for a specified table. Convenient for when you need to know the primary keys of a table before inserting.
 
 ```js
-await client.delete('my_table', 'column1 = value1');
+// Get primary keys for a table in the default schema
+const primaryKeys = await client.getPrimaryKeys('my_table');
+console.log(primaryKeys); // ['id']
+// Get primary keys for a schema-qualified table
+const keys = await client.getPrimaryKeys('my_schema.orders');
+console.log(keys); // ['order_id', 'customer_id']
 ```
 
 #### drop(tableName)

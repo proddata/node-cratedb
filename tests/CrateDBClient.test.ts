@@ -472,4 +472,76 @@ describe('CrateDBClient Integration Tests', () => {
       ]);
     });
   });
+
+  /* ---------------------------------------------
+   * Schema Information Tests
+   * --------------------------------------------- */
+  describe('Schema Information', () => {
+    it('should retrieve primary keys for a table', async () => {
+      const tableName = 'my_schema.primary_keys_test';
+
+      // Create a table with multiple primary keys
+      await client.createTable(tableName, {
+        id: { type: 'INTEGER', primaryKey: true },
+        email: { type: 'TEXT', primaryKey: true },
+        name: { type: 'TEXT' },
+        created_at: { type: 'TIMESTAMP' },
+      });
+
+      // Get primary keys
+      const primaryKeys = await client.getPrimaryKeys(tableName);
+
+      // Verify primary keys are returned in correct order
+      expect(primaryKeys).toEqual(['id', 'email']);
+
+      // Clean up
+      await client.drop(tableName);
+    });
+
+    it('should return empty array for table without primary keys', async () => {
+      const tableName = 'my_schema.no_pk_test';
+
+      // Create a table without primary keys
+      await client.createTable(tableName, {
+        id: { type: 'INTEGER' },
+        name: { type: 'TEXT' },
+      });
+
+      // Get primary keys
+      const primaryKeys = await client.getPrimaryKeys(tableName);
+
+      // Verify empty array is returned
+      expect(primaryKeys).toEqual([]);
+
+      // Clean up
+      await client.drop(tableName);
+    });
+
+    it('should handle schema-qualified and unqualified table names', async () => {
+      const schemaTableName = 'my_schema.qualified_test';
+      const unqualifiedTableName = 'unqualified_test';
+
+      // Create tables in different schemas
+      await client.createTable(schemaTableName, {
+        id: { type: 'INTEGER', primaryKey: true },
+      });
+
+      await client.createTable(unqualifiedTableName, {
+        id: { type: 'INTEGER', primaryKey: true },
+        email: { type: 'TEXT', primaryKey: true },
+      });
+
+      // Test schema-qualified table
+      const qualifiedKeys = await client.getPrimaryKeys(schemaTableName);
+      expect(qualifiedKeys).toEqual(['id']);
+
+      // Test unqualified table (should use default 'doc' schema)
+      const unqualifiedKeys = await client.getPrimaryKeys(unqualifiedTableName);
+      expect(unqualifiedKeys).toEqual(['id', 'email']);
+
+      // Clean up
+      await client.drop(schemaTableName);
+      await client.drop(unqualifiedTableName);
+    });
+  });
 });

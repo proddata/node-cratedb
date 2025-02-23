@@ -173,6 +173,18 @@ export class CrateDBClient {
     }
   }
 
+  /**
+   * Inserts a single row into a specified table with optional primary key conflict resolution.
+   *
+   * If primaryKeys are provided, conflicts will be handled by updating the non-primary key
+   * fields of the conflicting row. If no primaryKeys are provided, conflicting rows will be skipped.
+   *
+   * @param {string} tableName - The name of the table to insert the row into.
+   * @param {Record<string, unknown>} obj - An object representing the row to insert.
+   * @param {string[] | null} [primaryKeys=null] - Array of column names to use as primary keys for conflict resolution.
+   * @returns {Promise<CrateDBResponse>} A promise resolving to the response from CrateDB.
+   * @throws {Error} If the input parameters are invalid.
+   */
   async insert(
     tableName: string,
     obj: Record<string, unknown>,
@@ -197,9 +209,22 @@ export class CrateDBClient {
     return this.execute(query, args);
   }
 
+  /**
+   * Inserts multiple rows into a table with optional primary key conflict resolution.
+   *
+   * If primaryKeys are provided, conflicts will be handled by updating the non-primary key
+   * fields of conflicting rows. If no primaryKeys are provided, conflicting rows will be skipped.
+   * The method automatically handles varying column sets across the input objects.
+   *
+   * @param {string} tableName - The name of the table to insert rows into.
+   * @param {Record<string, unknown>[]} objectArray - Array of objects representing rows to insert.
+   * @param {string[] | null} [primaryKeys=null] - Array of column names to use as primary keys for conflict resolution.
+   * @returns {Promise<CrateDBBulkResponse>} A promise resolving to the bulk operation response from CrateDB.
+   * @throws {Error} If the input parameters are invalid or if the operation fails.
+   */
   async insertMany(
     tableName: string,
-    jsonArray: Record<string, unknown>[],
+    objectArray: Record<string, unknown>[],
     primaryKeys: string[] | null = null
   ): Promise<CrateDBBulkResponse> {
     const startInsertMany = Date.now();
@@ -207,7 +232,7 @@ export class CrateDBClient {
     if (!tableName || typeof tableName !== 'string') {
       throw new Error('tableName must be a valid string.');
     }
-    if (!Array.isArray(jsonArray) || jsonArray.length === 0) {
+    if (!Array.isArray(objectArray) || objectArray.length === 0) {
       throw new Error('insertMany requires a non-empty array of objects.');
     }
     if (primaryKeys && !Array.isArray(primaryKeys)) {
@@ -216,14 +241,14 @@ export class CrateDBClient {
 
     // Extract unique keys from all objects
     const uniqueKeys = Array.from(
-      jsonArray.reduce((keys: Set<string>, obj: Record<string, unknown>) => {
+      objectArray.reduce((keys: Set<string>, obj: Record<string, unknown>) => {
         Object.keys(obj).forEach((key) => keys.add(key));
         return keys;
       }, new Set<string>())
     );
 
     // Generate bulk arguments
-    const bulkArgs = jsonArray.map((obj) =>
+    const bulkArgs = objectArray.map((obj) =>
       uniqueKeys.map((key) => (Object.prototype.hasOwnProperty.call(obj, key) ? obj[key] : null))
     );
 
@@ -235,17 +260,6 @@ export class CrateDBClient {
     response.durations.preparation = elapsedTime - response.durations.request - (response.durations.cratedb ?? 0);
 
     return response;
-  }
-
-  async update(tableName: string, options: Record<string, unknown>, whereClause: string): Promise<CrateDBResponse> {
-    const { args } = this._prepareOptions(options);
-    const query = StatementGenerator.update(tableName, options, whereClause);
-    return this.execute(query, args);
-  }
-
-  async delete(tableName: string, whereClause: string): Promise<CrateDBResponse> {
-    const query = StatementGenerator.delete(tableName, whereClause);
-    return this.execute(query);
   }
 
   /**
@@ -305,15 +319,34 @@ export class CrateDBClient {
     return this.execute(query);
   }
 
-  private _prepareOptions(options: Record<string, unknown>): {
-    keys: string[];
-    values: string[];
-    args: unknown[];
-  } {
-    const keys = Object.keys(options).map((key) => `"${key}"`);
-    const values = keys.map(() => '?');
-    const args = Object.values(options);
-    return { keys, values, args };
+  /**
+   * Retrieves the primary key columns for a given table.
+   *
+   * Queries the information_schema to get the primary key columns
+   * of the specified table in their defined order.
+   *
+   * @param {string} tableName - The name of the table to get primary keys for.
+   * @returns {Promise<string[]>} A promise resolving to an array of primary key column names.
+   * @throws {Error} If the table doesn't exist or if there's an error retrieving the information.
+   */
+  async getPrimaryKeys(tableName: string): Promise<string[]> {
+    if (!tableName || typeof tableName !== 'string') {
+      throw new Error('tableName must be a valid string');
+    }
+
+    // Split schema and table name
+    const [schema = 'doc', table] = tableName.split('.');
+    const actualTable = table || schema;
+    const actualSchema = table ? schema : 'doc';
+
+    const query = StatementGenerator.getPrimaryKeys();
+    const response = await this.execute(query, [actualSchema, actualTable]);
+
+    if (!response.rows || response.rows.length === 0) {
+      return [];
+    }
+
+    return response.rows.map((row) => row[0] as string);
   }
 
   private _addDurations(startRequestTime: number, response: CrateDBBaseResponse): CrateDBBaseResponse {

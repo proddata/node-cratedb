@@ -1,4 +1,4 @@
-import { OptimizeOptions, ColumnDefinition, TableOptions } from './interfaces';
+import { OptimizeOptions, BaseColumnDefinition, ColumnDefinition, TableOptions } from './interfaces';
 import { Serializer } from './Serializer';
 
 export class StatementGenerator {
@@ -9,8 +9,13 @@ export class StatementGenerator {
   ): string {
     // Validate column definitions
     Object.entries(schema).forEach(([col, definition]) => {
-      if (definition.defaultValue !== undefined && definition.generatedAlways) {
-        throw new Error(`Column "${col}" cannot have both DEFAULT and GENERATED ALWAYS values`);
+      if ('type' in definition && definition.type !== 'object') {
+        if (
+          (definition as BaseColumnDefinition).defaultValue !== undefined &&
+          (definition as BaseColumnDefinition).generatedAlways
+        ) {
+          throw new Error(`Column "${col}" cannot have both DEFAULT and GENERATED ALWAYS values`);
+        }
       }
     });
 
@@ -21,7 +26,7 @@ export class StatementGenerator {
 
     // Build primary key clause if any
     const primaryKeys = Object.keys(schema)
-      .filter((col) => schema[col].primaryKey)
+      .filter((col) => (schema[col] as BaseColumnDefinition).primaryKey)
       .map((col) => `"${col}"`)
       .join(', ');
     const primaryKeyClause = primaryKeys ? `, PRIMARY KEY(${primaryKeys})` : '';
@@ -56,16 +61,6 @@ export class StatementGenerator {
 
   public static dropTable(tableName: string): string {
     return `DROP TABLE ${this.quoteIdentifier(tableName)};`;
-  }
-
-  public static delete(tableName: string, whereClause?: string): string {
-    return `DELETE FROM ${this.quoteIdentifier(tableName)} WHERE ${whereClause};`;
-  }
-
-  public static update(tableName: string, options: Record<string, unknown>, whereClause: string): string {
-    const { keys, values } = this._prepareOptions(options);
-    const setClause = keys.map((key, i) => `${key}=${values[i]}`).join(', ');
-    return `UPDATE ${this.quoteIdentifier(tableName)} SET ${setClause} WHERE ${whereClause};`;
   }
 
   public static insert(tableName: string, keys: string[], primaryKeys: string[] | null): string {
@@ -118,6 +113,23 @@ export class StatementGenerator {
     return query + ';';
   }
 
+  public static getPrimaryKeys(): string {
+    return `
+      SELECT
+        column_name
+      FROM
+        information_schema.table_constraints tc
+        JOIN information_schema.key_column_usage kc
+        ON kc.table_catalog = tc.table_catalog
+        AND kc.table_schema = tc.table_schema
+        AND kc.table_name = tc.table_name
+        AND kc.constraint_name = tc.constraint_name
+      WHERE tc.constraint_type = 'PRIMARY KEY'
+      AND tc.table_schema = ?
+      AND tc.table_name = ?
+      ORDER BY kc.ordinal_position;`;
+  }
+
   private static quoteIdentifier(tableName: string): string {
     return tableName
       .split('.')
@@ -138,28 +150,19 @@ export class StatementGenerator {
 
   private static buildColumnDefinition(colName: string, definition: ColumnDefinition): string {
     if ('properties' in definition) {
-      // Handle OBJECT type with different modes
+      // Handle OBJECT type
       const objectMode = definition.mode ? `(${definition.mode.toUpperCase()})` : '';
-      const objectProps = Object.entries(definition.properties)
+      const objectProps = Object.entries(definition.properties || {})
         .map(([key, prop]) => this.buildColumnDefinition(key, prop))
         .join(', ');
-
       return `"${colName}" OBJECT${objectMode} AS (${objectProps})`;
     }
-
-    // Regular column definition logic remains the same
+    const baseDefinition = definition as BaseColumnDefinition;
+    // Regular column definition
     let colDef = `"${colName}" ${definition.type.toUpperCase()}`;
-
-    if (definition.notNull) {
-      colDef += ' NOT NULL';
-    }
-
-    if (definition.defaultValue !== undefined) {
-      colDef += ` DEFAULT ${definition.defaultValue}`;
-    } else if (definition.generatedAlways) {
-      colDef += ` GENERATED ALWAYS AS (${definition.generatedAlways})`;
-    }
-
+    if (baseDefinition.notNull) colDef += ' NOT NULL';
+    if (baseDefinition.defaultValue !== undefined) colDef += ` DEFAULT ${baseDefinition.defaultValue}`;
+    if (baseDefinition.generatedAlways) colDef += ` GENERATED ALWAYS AS (${baseDefinition.generatedAlways})`;
     return colDef;
   }
 }

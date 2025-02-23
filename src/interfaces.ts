@@ -91,19 +91,15 @@ export type ObjectColumnDefinition = {
   properties?: Record<string, ColumnDefinition | ObjectColumnDefinition>;
 };
 
-/**
- * Defines the structure of a column in a CrateDB table.
- */
-export type ColumnDefinition =
-  | {
-      type: string;
-      primaryKey?: boolean;
-      notNull?: boolean;
-      defaultValue?: unknown;
-      generatedAlways?: string; // SQL expression for generated column
-      stored?: boolean;
-    }
-  | ObjectColumnDefinition;
+export type BaseColumnDefinition = {
+  type: string;
+  notNull?: boolean;
+  defaultValue?: string;
+  primaryKey?: boolean;
+  generatedAlways?: string;
+};
+
+export type ColumnDefinition = BaseColumnDefinition | ObjectColumnDefinition;
 
 /**
  * Defines additional table options such as clustering, partitioning, and replicas.

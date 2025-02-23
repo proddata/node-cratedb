@@ -86,22 +86,6 @@ describe('StatementGenerator SQL Generation', () => {
     );
   });
 
-  // DML tests (DELETE, UPDATE, INSERT)
-  it('should generate a DELETE query when a where clause is provided', () => {
-    const tableName = 'my_table';
-    const whereClause = 'id = 1';
-    expect(StatementGenerator.delete(tableName, whereClause)).toBe(`DELETE FROM "my_table" WHERE id = 1;`);
-  });
-
-  it('should generate an UPDATE query', () => {
-    const tableName = 'my_table';
-    const updateOptions = { col1: 'value1', col2: 42 };
-    const whereClause = 'id = 1';
-    expect(StatementGenerator.update(tableName, updateOptions, whereClause)).toBe(
-      `UPDATE "my_table" SET "col1"=?, "col2"=? WHERE id = 1;`
-    );
-  });
-
   it('should generate an INSERT query with conflict update when primary keys are provided', () => {
     const tableName = 'my_table';
     const keys = ['id', 'name', 'value'];
