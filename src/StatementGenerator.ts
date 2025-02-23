@@ -7,18 +7,16 @@ export class StatementGenerator {
     schema: Record<string, ColumnDefinition>,
     options?: TableOptions
   ): string {
+    // Validate column definitions
+    Object.entries(schema).forEach(([col, definition]) => {
+      if (definition.defaultValue !== undefined && definition.generatedAlways) {
+        throw new Error(`Column "${col}" cannot have both DEFAULT and GENERATED ALWAYS values`);
+      }
+    });
+
     // Build column definitions
     const columns = Object.entries(schema)
-      .map(([col, definition]) => {
-        let colDef = `"${col}" ${definition.type.toUpperCase()}`;
-        if (definition.notNull) {
-          colDef += ' NOT NULL';
-        }
-        if (definition.defaultValue !== undefined) {
-          colDef += ` DEFAULT ${definition.defaultValue}`;
-        }
-        return colDef;
-      })
+      .map(([col, definition]) => this.buildColumnDefinition(col, definition))
       .join(', ');
 
     // Build primary key clause if any
@@ -136,5 +134,32 @@ export class StatementGenerator {
     const values = keys.map(() => '?');
     const args = Object.values(options);
     return { keys, values, args };
+  }
+
+  private static buildColumnDefinition(colName: string, definition: ColumnDefinition): string {
+    if ('properties' in definition) {
+      // Handle OBJECT type with different modes
+      const objectMode = definition.mode ? `(${definition.mode.toUpperCase()})` : '';
+      const objectProps = Object.entries(definition.properties)
+        .map(([key, prop]) => this.buildColumnDefinition(key, prop))
+        .join(', ');
+
+      return `"${colName}" OBJECT${objectMode} AS (${objectProps})`;
+    }
+
+    // Regular column definition logic remains the same
+    let colDef = `"${colName}" ${definition.type.toUpperCase()}`;
+
+    if (definition.notNull) {
+      colDef += ' NOT NULL';
+    }
+
+    if (definition.defaultValue !== undefined) {
+      colDef += ` DEFAULT ${definition.defaultValue}`;
+    } else if (definition.generatedAlways) {
+      colDef += ` GENERATED ALWAYS AS (${definition.generatedAlways})`;
+    }
+
+    return colDef;
   }
 }

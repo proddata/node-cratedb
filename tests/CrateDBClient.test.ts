@@ -1,4 +1,4 @@
-import { describe, it, beforeAll, afterAll, expect, beforeEach } from 'vitest';
+import { describe, it, beforeAll, afterAll, expect, beforeEach, afterEach } from 'vitest';
 import { GenericContainer } from 'testcontainers';
 import { CrateDBClient } from '../src/CrateDBClient';
 import { CrateDBRecord, CrateDBBaseResponse } from '../src/interfaces';
@@ -401,6 +401,75 @@ describe('CrateDBClient Integration Tests', () => {
       expect(transformed.duration).toBe(1.234);
       expect(transformed.rowcount).toBe(2);
       expect(transformed.cols).toEqual(['id', 'name', 'age']);
+    });
+  });
+
+  describe('Object Column Types', () => {
+    const tableName = 'test_objects';
+
+    afterEach(async () => {
+      await client.execute(`DROP TABLE IF EXISTS ${tableName}`);
+    });
+
+    it('should create and query table with nested OBJECT columns', async () => {
+      await client.createTable(tableName, {
+        id: { type: 'integer', primaryKey: true },
+        metadata: {
+          type: 'object',
+          mode: 'strict',
+          properties: {
+            name: { type: 'text' },
+            location: {
+              type: 'object',
+              mode: 'strict',
+              properties: {
+                lat: { type: 'double' },
+                lon: { type: 'double' },
+              },
+            },
+          },
+        },
+        tags: {
+          type: 'object',
+          mode: 'dynamic',
+          properties: {
+            category: { type: 'text' },
+          },
+        },
+      });
+
+      await client.insert(tableName, {
+        id: 1,
+        metadata: {
+          name: 'Test Point',
+          location: {
+            lat: 40.7128,
+            lon: -74.006,
+          },
+        },
+        tags: {
+          category: 'test',
+          dynamic_field: 'should work', // Dynamic field
+        },
+      });
+
+      await client.refresh(tableName);
+
+      const result = await client.execute(`SELECT * FROM ${tableName}`);
+      expect(result.rows[0]).toMatchObject([
+        1,
+        {
+          name: 'Test Point',
+          location: {
+            lat: 40.7128,
+            lon: -74.006,
+          },
+        },
+        {
+          category: 'test',
+          dynamic_field: 'should work',
+        },
+      ]);
     });
   });
 });

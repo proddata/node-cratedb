@@ -83,15 +83,27 @@ export type OptimizeOptions = {
   flush?: boolean; // If false, prevents automatic flushing after optimization
 };
 
+export type ObjectMode = 'strict' | 'dynamic' | 'ignored';
+
+export type ObjectColumnDefinition = {
+  type: 'object';
+  mode?: ObjectMode;
+  properties?: Record<string, ColumnDefinition | ObjectColumnDefinition>;
+};
+
 /**
  * Defines the structure of a column in a CrateDB table.
  */
-export type ColumnDefinition = {
-  type: string;
-  primaryKey?: boolean;
-  notNull?: boolean;
-  defaultValue?: unknown;
-};
+export type ColumnDefinition =
+  | {
+      type: string;
+      primaryKey?: boolean;
+      notNull?: boolean;
+      defaultValue?: unknown;
+      generatedAlways?: string; // SQL expression for generated column
+      stored?: boolean;
+    }
+  | ObjectColumnDefinition;
 
 /**
  * Defines additional table options such as clustering, partitioning, and replicas.

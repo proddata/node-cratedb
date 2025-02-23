@@ -151,7 +151,7 @@ await client.execute('INSERT INTO my_table VALUES(?);', [['Hello'], ['World']]);
 #### streamQuery(sql, batchSize)
 
 The `streamQuery` method in CrateDBClient wraps the Cursor functionality
-for convenient query streaming. This method automatically manages the cursor’s
+for convenient query streaming. This method automatically manages the cursor's
 lifecycle.
 
 Streams query results row by row using an async generator. The `batchSize`
@@ -239,19 +239,79 @@ Refresh a specified table.
 await client.refresh('my_table');
 ```
 
-#### createTable(schema)
+#### createTable(tableName, schema, options?)
 
-Create a new table based on a schema definition.
+Creates a new table with the specified name, schema, and options.
 
-```js
-await client.createTable({
-  my_table: {
-    id: 'INTEGER PRIMARY KEY',
-    name: 'STRING',
-    created_at: 'TIMESTAMP',
+```typescript
+// Basic table creation
+await client.createTable('users', {
+  id: { type: 'INTEGER', primaryKey: true },
+  name: { type: 'TEXT', notNull: true },
+  age: { type: 'INTEGER' },
+  created_at: { type: 'TIMESTAMP', defaultValue: 'CURRENT_TIMESTAMP' },
+  metadata: {
+    type: 'object',
+    mode: 'strict',
+    properties: {
+      email: { type: 'TEXT' },
+      address: {
+        type: 'object',
+        mode: 'dynamic',
+        properties: {
+          city: { type: 'TEXT' },
+        },
+      },
+    },
   },
 });
+
+// Advanced table creation with options
+await client.createTable(
+  'metrics',
+  {
+    timestamp: { type: 'TIMESTAMP', primaryKey: true },
+    week: { type: 'TIMESTAMP', defaultValue: "date_trunc('week', timestamp)" },
+    sensor_id: { type: 'TEXT' },
+    value: { type: 'DOUBLE' },
+    location: {
+      type: 'object',
+      mode: 'strict',
+      properties: {
+        lat: { type: 'DOUBLE' },
+        lon: { type: 'DOUBLE' },
+      },
+    },
+  },
+  {
+    numberOfShards: 6,
+    numberOfReplicas: '2',
+    clusteredBy: 'sensor_id',
+    partitionedBy: ['week'],
+  }
+);
 ```
+
+##### Parameters
+
+- `tableName`: string - Name of the table to create
+- `schema`: Record<string, ColumnDefinition> - Object defining the table columns
+  - Regular columns:
+    - `type`: string - SQL type of the column
+    - `primaryKey?`: boolean - Whether this column is part of primary key
+    - `notNull?`: boolean - Whether this column can contain NULL values
+    - `defaultValue?`: unknown - Default value for the column
+    - `generatedAlways?`: string - SQL expression for generated column
+    - `stored?`: boolean - Whether generated column should be stored
+  - Object columns:
+    - `type`: 'object' - Specifies an object column
+    - `mode?`: 'strict' | 'dynamic' | 'ignored' - Object mode (default: no mode)
+    - `properties?`: Record<string, ColumnDefinition> - Optional nested column definitions
+- `options?`: TableOptions - Additional table configuration
+  - `clusteredBy?`: string - Column to use for clustering
+  - `partitionedBy?`: string[] - Columns to use for partitioning
+  - `numberOfShards?`: number - Number of shards (default: 6)
+  - `numberOfReplicas?`: string | number - Number of replicas (default: '1')
 
 ### Cursor Operations
 
