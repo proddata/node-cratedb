@@ -1,5 +1,5 @@
 import { OptimizeOptions, BaseColumnDefinition, ColumnDefinition, TableOptions } from './interfaces';
-import { Serializer } from './Serializer';
+import { Serializer } from './Serializer.js';
 
 export class StatementGenerator {
   public static createTable(
