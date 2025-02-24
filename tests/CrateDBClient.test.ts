@@ -544,4 +544,75 @@ describe('CrateDBClient Integration Tests', () => {
       await client.drop(unqualifiedTableName);
     });
   });
+
+  describe('Compression', () => {
+    it('should compress large requests when enabled', async () => {
+      // Create a large payload that will trigger compression
+      const largeData = Array(100).fill('test data').join(' ');
+      const tableName = 'compression_test';
+
+      await client.createTable(tableName, {
+        id: { type: 'INTEGER', primaryKey: true },
+        data: { type: 'TEXT' },
+      });
+
+      const response = await client.insert(tableName, {
+        id: 1,
+        data: largeData,
+      });
+
+      // Verify compression metrics
+      expect(response.sizes.requestUncompressed).toBeGreaterThan(response.sizes.request);
+      expect(response.sizes.request).toBeGreaterThan(0);
+
+      await client.drop(tableName);
+    });
+
+    it('should not compress small requests', async () => {
+      const smallData = 'small test data';
+      const tableName = 'small_data_test';
+
+      await client.createTable(tableName, {
+        id: { type: 'INTEGER', primaryKey: true },
+        data: { type: 'TEXT' },
+      });
+
+      const response = await client.insert(tableName, {
+        id: 1,
+        data: smallData,
+      });
+
+      // Verify no compression was applied
+      expect(response.sizes.request).toBe(response.sizes.requestUncompressed);
+      expect(response.sizes.request).toBeLessThan(1024);
+
+      await client.drop(tableName);
+    });
+
+    it('should respect compression setting when disabled', async () => {
+      const clientWithoutCompression = new CrateDBClient({
+        host: container.getHost(),
+        port: container.getMappedPort(4200),
+        enableCompression: false,
+      });
+
+      const largeData = Array(1000).fill('test data').join(' ');
+      const tableName = 'compression_disabled_test';
+
+      await clientWithoutCompression.createTable(tableName, {
+        id: { type: 'INTEGER', primaryKey: true },
+        data: { type: 'TEXT' },
+      });
+
+      const response = await clientWithoutCompression.insert(tableName, {
+        id: 1,
+        data: largeData,
+      });
+
+      // Verify no compression was applied despite large payload
+      expect(response.sizes.request).toBe(response.sizes.requestUncompressed);
+
+      await clientWithoutCompression.drop(tableName);
+    });
+  });
 });

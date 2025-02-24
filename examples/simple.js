@@ -1,4 +1,4 @@
-import { CrateDBClient } from '../dist/CrateDBClient.js';
+import { CrateDBClient } from '@proddata/node-cratedb';
 
 (async () => {
   const client = new CrateDBClient({
@@ -12,13 +12,11 @@ import { CrateDBClient } from '../dist/CrateDBClient.js';
   try {
     // --- Example 1: Creating a Table ---
     console.log('Creating a table...');
-    await client.createTable({
-      locations: {
-        id: 'INT PRIMARY KEY',
-        name: 'TEXT',
-        kind: 'TEXT',
-        description: 'TEXT',
-      },
+    await client.createTable('locations', {
+      id: { type: 'INTEGER', primaryKey: true },
+      name: { type: 'TEXT' },
+      kind: { type: 'TEXT' },
+      description: { type: 'TEXT' },
     });
     console.log('Table "locations" created.');
 
@@ -53,34 +51,18 @@ import { CrateDBClient } from '../dist/CrateDBClient.js';
 
     await client.refresh('locations');
 
-    // --- Example 5: Querying with a Cursor ---
-    console.log('Querying data using a cursor...');
-    const cursor = client.createCursor('SELECT * FROM locations ORDER BY id');
-    await cursor.open();
+    // --- Example 5: Streaming Query Results ---
+    console.log('Streaming query results...');
+    for await (const row of client.streamQuery('SELECT * FROM locations ORDER BY id')) {
+      console.log('Record:', row);
+    }
 
-    console.log('First record:', await cursor.fetchone()); // Fetch one record
-    console.log('Next two records:', await cursor.fetchmany(2)); // Fetch 2 records
-    console.log('All remaining records:', await cursor.fetchall()); // Fetch all remaining records
+    // --- Example 6: Getting Primary Keys ---
+    console.log('Getting primary keys...');
+    const primaryKeys = await client.getPrimaryKeys('locations');
+    console.log('Primary keys:', primaryKeys);
 
-    await cursor.close(); // Close the cursor and commit the transaction
-
-    // --- Example 6: Updating Data ---
-    console.log('Updating a record...');
-    await client.update('locations', { description: 'Blue and beautiful.' }, 'id = 1');
-    await client.refresh('locations');
-
-    const updatedResult = await client.execute('SELECT * FROM locations WHERE id = 1');
-    console.log('Updated record:', updatedResult.rows);
-
-    // --- Example 7: Deleting Data ---
-    console.log('Deleting a record...');
-    await client.delete('locations', 'id = 4');
-    await client.refresh('locations');
-
-    const remainingResult = await client.execute('SELECT * FROM locations');
-    console.log('Remaining records:', remainingResult.rows);
-
-    // --- Example 8: Dropping the Table ---
+    // --- Example 7: Dropping the Table ---
     console.log('Dropping the table...');
     await client.drop('locations');
     console.log('Table "locations" dropped.');

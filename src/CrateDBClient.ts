@@ -18,6 +18,8 @@ import {
 } from './interfaces';
 import { CrateDBError, DeserializationError, RequestError } from './utils/Error.js';
 import { StatementGenerator } from './StatementGenerator.js';
+import zlib from 'zlib';
+import { promisify } from 'util';
 
 // Configuration options with CrateDB-specific environment variables
 const defaultConfig: CrateDBConfig = {
@@ -37,6 +39,8 @@ const defaultConfig: CrateDBConfig = {
     date: 'date',
   },
   rowMode: 'array',
+  enableCompression: true,
+  compressionThreshold: 1024, // Default to 1KB
 };
 
 export class CrateDBClient {
@@ -365,40 +369,102 @@ export class CrateDBClient {
     return response;
   }
 
-  async _makeRequest(options: http.RequestOptions & { body?: string }): Promise<CrateDBBaseResponse> {
+  async _makeRequest(options: http.RequestOptions & { body?: string | Buffer }): Promise<CrateDBBaseResponse> {
     return new Promise((resolve, reject) => {
-      const requestBodySize = options.body ? Buffer.byteLength(options.body) : 0;
-      const req = (this.protocol === 'https' ? https : http).request(options, (response) => {
-        const data: Buffer[] = [];
-        response.on('data', (chunk: Buffer) => data.push(chunk));
-        response.on('end', () => {
-          const rawResponse = Buffer.concat(data); // Raw response data as a buffer
-          const responseBodySize = rawResponse.length;
+      try {
+        let requestBody = options.body;
+        const headers = { ...options.headers };
+        const requestBodySize = requestBody ? Buffer.byteLength(requestBody) : 0;
+        let compressedSize = requestBodySize;
 
-          try {
-            const parsedResponse = Serializer.deserialize(rawResponse.toString(), this.cfg.deserialization);
-            if (response.statusCode === 200) {
-              resolve({
-                ...parsedResponse,
-                sizes: { response: responseBodySize, request: requestBodySize },
+        if (this.cfg.enableCompression && requestBody && requestBodySize > (this.cfg.compressionThreshold ?? 1024)) {
+          promisify(zlib.gzip)(requestBody)
+            .then((compressed) => {
+              requestBody = compressed;
+              compressedSize = Buffer.byteLength(requestBody);
+              headers['Content-Encoding'] = 'gzip';
+
+              const req = (this.protocol === 'https' ? https : http).request({ ...options, headers }, (response) => {
+                const data: Buffer[] = [];
+                response.on('data', (chunk: Buffer) => data.push(chunk));
+                response.on('end', () => {
+                  const rawResponse = Buffer.concat(data);
+                  const responseBodySize = rawResponse.length;
+
+                  try {
+                    const parsedResponse = Serializer.deserialize(rawResponse.toString(), this.cfg.deserialization);
+
+                    if (response.statusCode === 200) {
+                      resolve({
+                        ...parsedResponse,
+                        sizes: {
+                          response: responseBodySize,
+                          request: compressedSize,
+                          requestUncompressed: requestBodySize,
+                        },
+                      });
+                    } else {
+                      reject(CrateDBError.fromResponse(parsedResponse as CrateDBErrorResponse, response.statusCode));
+                    }
+                  } catch (parseErr: unknown) {
+                    if (parseErr instanceof Error) {
+                      reject(
+                        new Error(
+                          `Failed to parse response: ${parseErr.message}. Raw response: ${rawResponse.toString()}`
+                        )
+                      );
+                    } else {
+                      reject(new Error(`Failed to parse response. Raw response: ${rawResponse.toString()}`));
+                    }
+                  }
+                });
               });
-            } else {
-              reject(CrateDBError.fromResponse(parsedResponse as CrateDBErrorResponse, response.statusCode));
-            }
-          } catch (parseErr: unknown) {
-            // Handle parsing errors
-            if (parseErr instanceof Error) {
-              reject(
-                new Error(`Failed to parse response: ${parseErr.message}. Raw response: ${rawResponse.toString()}`)
-              );
-            } else {
-              reject(new Error(`Failed to parse response. Raw response: ${rawResponse.toString()}`));
-            }
-          }
-        });
-      });
-      req.on('error', (err) => reject(new Error(`Request failed: ${err.message}`)));
-      req.end(options.body || null);
+
+              req.on('error', (err) => reject(new Error(`Request failed: ${err.message}`)));
+              req.end(requestBody);
+            })
+            .catch((error) => reject(error));
+        } else {
+          const req = (this.protocol === 'https' ? https : http).request({ ...options, headers }, (response) => {
+            const data: Buffer[] = [];
+            response.on('data', (chunk: Buffer) => data.push(chunk));
+            response.on('end', () => {
+              const rawResponse = Buffer.concat(data);
+              const responseBodySize = rawResponse.length;
+
+              try {
+                const parsedResponse = Serializer.deserialize(rawResponse.toString(), this.cfg.deserialization);
+
+                if (response.statusCode === 200) {
+                  resolve({
+                    ...parsedResponse,
+                    sizes: {
+                      response: responseBodySize,
+                      request: compressedSize,
+                      requestUncompressed: requestBodySize,
+                    },
+                  });
+                } else {
+                  reject(CrateDBError.fromResponse(parsedResponse as CrateDBErrorResponse, response.statusCode));
+                }
+              } catch (parseErr: unknown) {
+                if (parseErr instanceof Error) {
+                  reject(
+                    new Error(`Failed to parse response: ${parseErr.message}. Raw response: ${rawResponse.toString()}`)
+                  );
+                } else {
+                  reject(new Error(`Failed to parse response. Raw response: ${rawResponse.toString()}`));
+                }
+              }
+            });
+          });
+
+          req.on('error', (err) => reject(new Error(`Request failed: ${err.message}`)));
+          req.end(requestBody);
+        }
+      } catch (error) {
+        reject(error);
+      }
     });
   }
 

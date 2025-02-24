@@ -76,20 +76,22 @@ The `CrateDBClient` can be configured with either environment variables or direc
 
 #### Configuration Options
 
-| Option             | Type                    | Default Value                                         | Description                                                  |
-| ------------------ | ----------------------- | ----------------------------------------------------- | ------------------------------------------------------------ |
-| `user`             | `string`                | `'crate'` or `process.env.CRATEDB_USER`               | Database user.                                               |
-| `password`         | `string` or `null`      | `''` or `process.env.CRATEDB_PASSWORD`                | Database password.                                           |
-| `jwt`              | `string \| null`        | `null`                                                | JWT token for Bearer authentication.                         |
-| `host`             | `string`                | `'localhost'` or `process.env.CRATEDB_HOST`           | Database host.                                               |
-| `port`             | `number`                | `4200` or `process.env.CRATEDB_PORT`                  | Database port.                                               |
-| `defaultSchema`    | `string`                | `null` or `process.env.CRATEDB_DEFAULT_SCHEMA`        | Default schema for queries.                                  |
-| `connectionString` | `string`                | `null`                                                | Connection string, e.g., `https://user:password@host:port/`. |
-| `ssl`              | `object` or `null`      | `null`                                                | SSL configuration;                                           |
-| `keepAlive`        | `boolean`               | `true`                                                | Enables HTTP keep-alive for persistent connections.          |
-| `maxConnections`   | `number`                | `20`                                                  | Limits the maximum number of concurrent connections.         |
-| `deserialization`  | `DeserializationConfig` | `{ long: 'number', timestamp: 'date', date: 'date' }` | Controls deserialization behaviour                           |
-| `rowMode`          | `'array' \| 'object'`   | `'array'`                                             | Controls the format of returned rows.                        |
+| Option                 | Type                    | Default Value                                         | Description                                                  |
+| ---------------------- | ----------------------- | ----------------------------------------------------- | ------------------------------------------------------------ |
+| `user`                 | `string`                | `'crate'` or `process.env.CRATEDB_USER`               | Database user.                                               |
+| `password`             | `string` or `null`      | `''` or `process.env.CRATEDB_PASSWORD`                | Database password.                                           |
+| `jwt`                  | `string \| null`        | `null`                                                | JWT token for Bearer authentication.                         |
+| `host`                 | `string`                | `'localhost'` or `process.env.CRATEDB_HOST`           | Database host.                                               |
+| `port`                 | `number`                | `4200` or `process.env.CRATEDB_PORT`                  | Database port.                                               |
+| `defaultSchema`        | `string`                | `null` or `process.env.CRATEDB_DEFAULT_SCHEMA`        | Default schema for queries.                                  |
+| `connectionString`     | `string`                | `null`                                                | Connection string, e.g., `https://user:password@host:port/`. |
+| `ssl`                  | `object` or `null`      | `null`                                                | SSL configuration;                                           |
+| `keepAlive`            | `boolean`               | `true`                                                | Enables HTTP keep-alive for persistent connections.          |
+| `maxConnections`       | `number`                | `20`                                                  | Limits the maximum number of concurrent connections.         |
+| `deserialization`      | `DeserializationConfig` | `{ long: 'number', timestamp: 'date', date: 'date' }` | Controls deserialization behaviour                           |
+| `rowMode`              | `'array' \| 'object'`   | `'array'`                                             | Controls the format of returned rows.                        |
+| `enableCompression`    | `boolean`               | `true`                                                | Enables GZIP compression for large requests.                 |
+| `compressionThreshold` | `number`                | `1024`                                                | Minimum size in bytes before compression is applied.         |
 
 #### Environment Variables
 
@@ -101,6 +103,17 @@ export CRATEDB_PASSWORD=secretpassword
 export CRATEDB_HOST=my.database-server.com
 export CRATEDB_PORT=4200
 export CRATEDB_DEFAULT_SCHEMA=doc
+```
+
+#### RequestCompression
+
+The client supports automatic GZIP compression for large requests to improve network efficiency. When enabled, any request larger than the compression threshold will be automatically compressed.
+
+```typescript
+const client = new CrateDBClient({
+  enableCompression: true,
+  compressionThreshold: 1024, // Default to 1KB
+});
 ```
 
 ---
