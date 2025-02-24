@@ -60,7 +60,7 @@ export class StatementGenerator {
   }
 
   public static dropTable(tableName: string): string {
-    return `DROP TABLE ${this.quoteIdentifier(tableName)};`;
+    return `DROP TABLE IF EXISTS ${this.quoteIdentifier(tableName)};`;
   }
 
   public static insert(tableName: string, keys: string[], primaryKeys: string[] | null): string {

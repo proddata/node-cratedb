@@ -106,7 +106,7 @@ describe('StatementGenerator SQL Generation', () => {
   // Maintenance commands (DROP, REFRESH)
   it('should generate a DROP TABLE query', () => {
     const tableName = 'my_table';
-    expect(StatementGenerator.dropTable(tableName)).toBe(`DROP TABLE "my_table";`);
+    expect(StatementGenerator.dropTable(tableName)).toBe(`DROP TABLE IF EXISTS "my_table";`);
   });
 
   it('should generate a REFRESH query', () => {
