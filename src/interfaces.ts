@@ -37,7 +37,10 @@ export interface CrateDBBaseResponse {
   durations: {
     cratedb?: number;
     request: number;
+    encoding?: number;
     preparation?: number;
+    deserialization?: number;
+    total?: number;
   };
   sizes: {
     request: number;
@@ -97,7 +100,7 @@ export type ObjectColumnDefinition = {
 export type BaseColumnDefinition = {
   type: string;
   notNull?: boolean;
-  defaultValue?: string;
+  defaultValue?: string | number | boolean | undefined;
   primaryKey?: boolean;
   generatedAlways?: string;
 };

@@ -354,18 +354,15 @@ export class CrateDBClient {
   }
 
   private _addDurations(startRequestTime: number, response: CrateDBBaseResponse): CrateDBBaseResponse {
-    const totalRequestTime = Date.now() - startRequestTime;
-    if (typeof response.duration === 'number') {
-      response.durations = {
-        cratedb: response.duration,
-        request: totalRequestTime - response.duration,
-      };
-    } else {
-      response.durations = {
-        cratedb: 0,
-        request: totalRequestTime,
-      };
-    }
+    const totalTime = Date.now() - startRequestTime;
+    const cratedb = typeof response.duration === 'number' ? response.duration : 0;
+
+    response.durations = {
+      ...response.durations, // preserves encoding, request, deserialization from _makeRequest
+      total: totalTime,
+      cratedb,
+    };
+
     return response;
   }
 
@@ -375,32 +372,47 @@ export class CrateDBClient {
         let requestBody = options.body;
         const headers = { ...options.headers };
         const requestBodySize = requestBody ? Buffer.byteLength(requestBody) : 0;
-        let compressedSize = requestBodySize;
+        let encodedSize = requestBodySize;
+        let encodingDuration = 0;
+        let requestDuration = 0;
+        let deserializationDuration = 0;
+
+        const startEncodingTime = Date.now();
 
         if (this.cfg.enableCompression && requestBody && requestBodySize > (this.cfg.compressionThreshold ?? 1024)) {
           promisify(zlib.gzip)(requestBody)
             .then((compressed) => {
+              const startRequestTime = Date.now();
+              encodingDuration = startRequestTime - startEncodingTime;
               requestBody = compressed;
-              compressedSize = Buffer.byteLength(requestBody);
+              encodedSize = Buffer.byteLength(requestBody);
               headers['Content-Encoding'] = 'gzip';
 
+              const reqStartTime = Date.now();
               const req = (this.protocol === 'https' ? https : http).request({ ...options, headers }, (response) => {
                 const data: Buffer[] = [];
                 response.on('data', (chunk: Buffer) => data.push(chunk));
                 response.on('end', () => {
+                  const startDeserializationTime = Date.now();
+                  requestDuration = startDeserializationTime - reqStartTime;
                   const rawResponse = Buffer.concat(data);
                   const responseBodySize = rawResponse.length;
 
                   try {
                     const parsedResponse = Serializer.deserialize(rawResponse.toString(), this.cfg.deserialization);
-
+                    deserializationDuration = Date.now() - startDeserializationTime;
                     if (response.statusCode === 200) {
                       resolve({
                         ...parsedResponse,
                         sizes: {
                           response: responseBodySize,
-                          request: compressedSize,
+                          request: encodedSize,
                           requestUncompressed: requestBodySize,
+                        },
+                        durations: {
+                          encoding: encodingDuration,
+                          request: requestDuration,
+                          deserialization: deserializationDuration,
                         },
                       });
                     } else {
@@ -425,23 +437,31 @@ export class CrateDBClient {
             })
             .catch((error) => reject(error));
         } else {
+          const startRequestTime = Date.now();
           const req = (this.protocol === 'https' ? https : http).request({ ...options, headers }, (response) => {
             const data: Buffer[] = [];
             response.on('data', (chunk: Buffer) => data.push(chunk));
             response.on('end', () => {
+              const startDeserializationTime = Date.now();
+              const requestDuration = startDeserializationTime - startRequestTime;
               const rawResponse = Buffer.concat(data);
               const responseBodySize = rawResponse.length;
 
               try {
                 const parsedResponse = Serializer.deserialize(rawResponse.toString(), this.cfg.deserialization);
-
+                const deserializationDuration = Date.now() - startDeserializationTime;
                 if (response.statusCode === 200) {
                   resolve({
                     ...parsedResponse,
                     sizes: {
                       response: responseBodySize,
-                      request: compressedSize,
+                      request: encodedSize,
                       requestUncompressed: requestBodySize,
+                    },
+                    durations: {
+                      encoding: 0,
+                      request: requestDuration,
+                      deserialization: deserializationDuration,
                     },
                   });
                 } else {

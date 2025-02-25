@@ -384,6 +384,18 @@ export type DeserializationConfig = {
 };
 ```
 
+## Duration Metrics
+
+The client collects several duration metrics for each request to help diagnose performance:
+
+- **encoding**: Time spent compressing the request payload. If compression is disabled or the payload is below the threshold, this value is `0`.
+- **request**: Time elapsed from sending the request until the response is received.
+- **deserialization**: Time taken to parse and deserialize the response.
+- **total**: Overall time from initiating the request until the response is fully processed.
+- **client**: Client-side processing time, computed as `total - cratedb`, which represents the overhead outside of CrateDB execution.
+
+These metrics are available via the `durations` property in the response object returned by methods such as `execute` and `executeMany`.
+
 ## License
 
 MIT License. Feel free to use and modify this library as per the terms of the license.

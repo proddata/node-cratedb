@@ -153,6 +153,7 @@ describe('CrateDBClient Integration Tests', () => {
       expect(response.durations).toBeDefined();
       expect(response.durations.request).toBeDefined();
       expect(response.durations.cratedb).toBeDefined();
+      expect(response.durations.total).toBeGreaterThan(0);
       expect(response.sizes).toBeDefined();
       expect(response.sizes.request).toBeGreaterThan(0);
       expect(response.sizes.response).toBeGreaterThan(0);
@@ -240,6 +241,7 @@ describe('CrateDBClient Integration Tests', () => {
       expect(insertManyResult.durations).toBeDefined();
       expect(insertManyResult.durations.request).toBeDefined();
       expect(insertManyResult.durations.cratedb).toBeDefined();
+      expect(insertManyResult.durations.total).toBeGreaterThan(0);
 
       await client.refresh(tableName);
       const result = await client.execute(`SELECT * FROM ${tableName}`);
@@ -564,6 +566,9 @@ describe('CrateDBClient Integration Tests', () => {
       // Verify compression metrics
       expect(response.sizes.requestUncompressed).toBeGreaterThan(response.sizes.request);
       expect(response.sizes.request).toBeGreaterThan(0);
+      expect(response.durations.encoding).toBeDefined();
+      expect(response.durations.encoding).toBeGreaterThan(0);
+      expect(response.durations.total).toBeGreaterThan(0);
 
       await client.drop(tableName);
     });
@@ -585,6 +590,8 @@ describe('CrateDBClient Integration Tests', () => {
       // Verify no compression was applied
       expect(response.sizes.request).toBe(response.sizes.requestUncompressed);
       expect(response.sizes.request).toBeLessThan(1024);
+      expect(response.durations.encoding).toBe(0);
+      expect(response.durations.total).toBeGreaterThan(0);
 
       await client.drop(tableName);
     });
@@ -611,6 +618,8 @@ describe('CrateDBClient Integration Tests', () => {
 
       // Verify no compression was applied despite large payload
       expect(response.sizes.request).toBe(response.sizes.requestUncompressed);
+      expect(response.durations.encoding).toBe(0);
+      expect(response.durations.total).toBeGreaterThan(0);
 
       await clientWithoutCompression.drop(tableName);
     });
