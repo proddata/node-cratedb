@@ -39,8 +39,10 @@ const defaultConfig: CrateDBConfig = {
     date: 'date',
   },
   rowMode: 'array',
-  enableCompression: true,
-  compressionThreshold: 1024, // Default to 1KB
+  compression: {
+    request: 'gzip',
+    response: 'none',
+  },
 };
 
 export class CrateDBClient {
@@ -84,6 +86,15 @@ export class CrateDBClient {
       };
     }
 
+    const additionalHeaders: Record<string, string> = {};
+
+    if (cfg.compression.request == 'gzip') {
+      additionalHeaders['Content-Encoding'] = 'gzip';
+    }
+    if (cfg.compression.response == 'gzip') {
+      additionalHeaders['Accept-Encoding'] = 'gzip';
+    }
+
     this.httpOptions = {
       hostname: cfg.host,
       port: cfg.port,
@@ -94,6 +105,7 @@ export class CrateDBClient {
         'Content-Type': 'application/json',
         Accept: 'application/json',
         ...authHeader,
+        ...additionalHeaders,
         ...(cfg.defaultSchema ? { 'Default-Schema': cfg.defaultSchema } : {}),
       },
       auth: cfg.jwt ? undefined : cfg.user && cfg.password ? `${cfg.user}:${cfg.password}` : undefined,
@@ -367,125 +379,85 @@ export class CrateDBClient {
   }
 
   async _makeRequest(options: http.RequestOptions & { body?: string | Buffer }): Promise<CrateDBBaseResponse> {
-    return new Promise((resolve, reject) => {
-      try {
-        let requestBody = options.body;
-        const headers = { ...options.headers };
-        const requestBodySize = requestBody ? Buffer.byteLength(requestBody) : 0;
-        let encodedSize = requestBodySize;
-        let encodingDuration = 0;
-        let requestDuration = 0;
-        let deserializationDuration = 0;
+    let requestBody = options.body;
+    const headers = { ...options.headers };
+    const requestBodySize = requestBody ? Buffer.byteLength(requestBody) : 0;
+    let encodedSize = requestBodySize;
+    let encodingDuration = 0;
+    let requestDuration = 0;
+    let deserializationDuration = 0;
 
-        const startEncodingTime = Date.now();
+    // Compress the request body if needed.
+    if (this.cfg.compression.request === 'gzip' && requestBody) {
+      const startEncodingTime = Date.now();
+      requestBody = await promisify(zlib.gzip)(requestBody);
+      encodingDuration = Date.now() - startEncodingTime;
+      encodedSize = Buffer.byteLength(requestBody);
+    }
 
-        if (this.cfg.enableCompression && requestBody && requestBodySize > (this.cfg.compressionThreshold ?? 1024)) {
-          promisify(zlib.gzip)(requestBody)
-            .then((compressed) => {
-              const startRequestTime = Date.now();
-              encodingDuration = startRequestTime - startEncodingTime;
-              requestBody = compressed;
-              encodedSize = Buffer.byteLength(requestBody);
-              headers['Content-Encoding'] = 'gzip';
-
-              const reqStartTime = Date.now();
-              const req = (this.protocol === 'https' ? https : http).request({ ...options, headers }, (response) => {
-                const data: Buffer[] = [];
-                response.on('data', (chunk: Buffer) => data.push(chunk));
-                response.on('end', () => {
-                  const startDeserializationTime = Date.now();
-                  requestDuration = startDeserializationTime - reqStartTime;
-                  const rawResponse = Buffer.concat(data);
-                  const responseBodySize = rawResponse.length;
-
-                  try {
-                    const parsedResponse = Serializer.deserialize(rawResponse.toString(), this.cfg.deserialization);
-                    deserializationDuration = Date.now() - startDeserializationTime;
-                    if (response.statusCode === 200) {
-                      resolve({
-                        ...parsedResponse,
-                        sizes: {
-                          response: responseBodySize,
-                          request: encodedSize,
-                          requestUncompressed: requestBodySize,
-                        },
-                        durations: {
-                          encoding: encodingDuration,
-                          request: requestDuration,
-                          deserialization: deserializationDuration,
-                        },
-                      });
-                    } else {
-                      reject(CrateDBError.fromResponse(parsedResponse as CrateDBErrorResponse, response.statusCode));
-                    }
-                  } catch (parseErr: unknown) {
-                    if (parseErr instanceof Error) {
-                      reject(
-                        new Error(
-                          `Failed to parse response: ${parseErr.message}. Raw response: ${rawResponse.toString()}`
-                        )
-                      );
-                    } else {
-                      reject(new Error(`Failed to parse response. Raw response: ${rawResponse.toString()}`));
-                    }
-                  }
-                });
-              });
-
-              req.on('error', (err) => reject(new Error(`Request failed: ${err.message}`)));
-              req.end(requestBody);
-            })
-            .catch((error) => reject(error));
-        } else {
-          const startRequestTime = Date.now();
-          const req = (this.protocol === 'https' ? https : http).request({ ...options, headers }, (response) => {
-            const data: Buffer[] = [];
-            response.on('data', (chunk: Buffer) => data.push(chunk));
-            response.on('end', () => {
-              const startDeserializationTime = Date.now();
-              const requestDuration = startDeserializationTime - startRequestTime;
-              const rawResponse = Buffer.concat(data);
-              const responseBodySize = rawResponse.length;
-
-              try {
-                const parsedResponse = Serializer.deserialize(rawResponse.toString(), this.cfg.deserialization);
-                const deserializationDuration = Date.now() - startDeserializationTime;
-                if (response.statusCode === 200) {
-                  resolve({
-                    ...parsedResponse,
-                    sizes: {
-                      response: responseBodySize,
-                      request: encodedSize,
-                      requestUncompressed: requestBodySize,
-                    },
-                    durations: {
-                      encoding: 0,
-                      request: requestDuration,
-                      deserialization: deserializationDuration,
-                    },
-                  });
-                } else {
-                  reject(CrateDBError.fromResponse(parsedResponse as CrateDBErrorResponse, response.statusCode));
-                }
-              } catch (parseErr: unknown) {
-                if (parseErr instanceof Error) {
-                  reject(
-                    new Error(`Failed to parse response: ${parseErr.message}. Raw response: ${rawResponse.toString()}`)
-                  );
-                } else {
-                  reject(new Error(`Failed to parse response. Raw response: ${rawResponse.toString()}`));
-                }
-              }
-            });
-          });
-
-          req.on('error', (err) => reject(new Error(`Request failed: ${err.message}`)));
-          req.end(requestBody);
-        }
-      } catch (error) {
-        reject(error);
-      }
+    // Wrap the HTTP request in a promise.
+    const { response, data } = await new Promise<{
+      response: http.IncomingMessage;
+      data: Buffer[];
+    }>((resolve, reject) => {
+      const protocolHandler = this.protocol === 'https' ? https : http;
+      const req = protocolHandler.request({ ...options, headers }, (response) => {
+        const data: Buffer[] = [];
+        response.on('data', (chunk: Buffer) => data.push(chunk));
+        response.on('end', () => resolve({ response, data }));
+      });
+      req.on('error', (err) => reject(new Error(`Request failed: ${err.message}\nStack trace: ${err.stack}`)));
+      req.end(requestBody);
     });
+
+    requestDuration = Date.now() - (response.headers.date ? new Date(response.headers.date).getTime() : Date.now());
+    let rawResponse = Buffer.concat(data);
+    const responseBodySize = rawResponse.length;
+
+    // Decompress the response if gzip encoded.
+    if (response.headers['content-encoding'] === 'gzip') {
+      try {
+        rawResponse = await promisify(zlib.gunzip)(rawResponse);
+      } catch (error) {
+        if (error instanceof Error) {
+          throw new Error(`Failed to decompress response: ${error.message}`);
+        } else {
+          throw new Error(`Failed to decompress response: ${String(error)}`);
+        }
+      }
+    }
+
+    // Deserialize the response.
+    const startDeserializationTime = Date.now();
+    let parsedResponse;
+    try {
+      parsedResponse = Serializer.deserialize(rawResponse.toString(), this.cfg.deserialization);
+    } catch (err) {
+      if (err instanceof Error) {
+        throw new Error(`Failed to parse response: ${err.message}. Raw response: ${rawResponse.toString()}`);
+      } else {
+        throw new Error(`Failed to parse response: ${String(err)}. Raw response: ${rawResponse.toString()}`);
+      }
+    }
+    deserializationDuration = Date.now() - startDeserializationTime;
+
+    if (response.statusCode === 200) {
+      return {
+        ...parsedResponse,
+        sizes: {
+          response: responseBodySize,
+          request: encodedSize,
+          requestUncompressed: requestBodySize,
+        },
+        durations: {
+          encoding: encodingDuration,
+          request: requestDuration,
+          deserialization: deserializationDuration,
+        },
+      };
+    } else {
+      throw CrateDBError.fromResponse(parsedResponse as CrateDBErrorResponse, response.statusCode!);
+    }
   }
 
   protected _transformResponse(

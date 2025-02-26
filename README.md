@@ -3,10 +3,10 @@
 
 # CrateDB HTTP API Client for Node.js
 
-This library is a lightweight Node.js client derived from `node-crate` for interacting with CrateDB via its **HTTP endpoint**. Unlike libraries such as `node-postgres`, which use the PostgreSQL wire protocol, this client communicates with CrateDB's native HTTP API.
+This library is a Node.js client derived from `node-crate` for interacting with CrateDB via its **HTTP endpoint**. Unlike libraries such as `node-postgres`, which use the PostgreSQL wire protocol, this client communicates with CrateDB's native HTTP API.
 
 > [!CAUTION]
-> While it provides basic functionality to interact with CrateDB, it is not production-ready and lacks the robustness of established libraries.
+> While it provides basic functionality to interact with CrateDB, it is **not** production-ready and lacks the robustness of established libraries.
 > For production use, consider mature libraries like [`node-postgres`](https://node-postgres.com/) which leverage CrateDB's PostgreSQL compatibility.
 
 ## Installation
@@ -107,12 +107,15 @@ export CRATEDB_DEFAULT_SCHEMA=doc
 
 #### RequestCompression
 
-The client supports automatic GZIP compression for large requests to improve network efficiency. When enabled, any request larger than the compression threshold will be automatically compressed.
+The client supports GZIP compression for requests and response to improve network efficiency.
+Request compression is enabled by default, response compression is disabled.
 
 ```typescript
 const client = new CrateDBClient({
-  enableCompression: true,
-  compressionThreshold: 1024, // Default to 1KB
+  compression: {
+    request: 'gzip',
+    response: 'none',
+  },
 });
 ```
 

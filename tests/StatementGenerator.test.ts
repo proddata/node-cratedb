@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { StatementGenerator } from '../src/StatementGenerator';
+import { ColumnDefinition } from '../src/interfaces';
 
 describe('StatementGenerator SQL Generation', () => {
   // CREATE TABLE tests
@@ -34,7 +35,7 @@ describe('StatementGenerator SQL Generation', () => {
 
   it('should generate a CREATE TABLE query with default values and NOT NULL constraints', () => {
     const tableName = 'default_table';
-    const columns = {
+    const columns: Record<string, ColumnDefinition> = {
       id: { type: 'integer', primaryKey: true, notNull: true, defaultValue: 1 },
       name: { type: 'string', primaryKey: false, notNull: false, defaultValue: "'unknown'" },
     };

@@ -13,9 +13,13 @@ export interface CrateDBConfig {
   maxConnections: number;
   deserialization: DeserializationConfig;
   rowMode?: 'array' | 'object';
-  enableCompression?: boolean; // If true, enables gzip compression for large requests
-  compressionThreshold?: number; // Size in bytes before compression is applied
+  compression: CompressionOptions;
 }
+
+type CompressionOptions = {
+  request: 'gzip' | 'none';
+  response: 'gzip' | 'none';
+};
 
 export type DeserializationConfig = {
   long: 'bigint' | 'number';

@@ -548,9 +548,10 @@ describe('CrateDBClient Integration Tests', () => {
   });
 
   describe('Compression', () => {
-    it('should compress large requests when enabled', async () => {
-      // Create a large payload that will trigger compression
-      const largeData = Array(100).fill('test data').join(' ');
+    it('should compress by default', async () => {
+      const records = Array(20000)
+        .fill({})
+        .map((_, i) => ({ id: i, data: 'Alice' }));
       const tableName = 'compression_test';
 
       await client.createTable(tableName, {
@@ -558,10 +559,7 @@ describe('CrateDBClient Integration Tests', () => {
         data: { type: 'TEXT' },
       });
 
-      const response = await client.insert(tableName, {
-        id: 1,
-        data: largeData,
-      });
+      const response = await client.insertMany(tableName, records);
 
       // Verify compression metrics
       expect(response.sizes.requestUncompressed).toBeGreaterThan(response.sizes.request);
@@ -573,34 +571,11 @@ describe('CrateDBClient Integration Tests', () => {
       await client.drop(tableName);
     });
 
-    it('should not compress small requests', async () => {
-      const smallData = 'small test data';
-      const tableName = 'small_data_test';
-
-      await client.createTable(tableName, {
-        id: { type: 'INTEGER', primaryKey: true },
-        data: { type: 'TEXT' },
-      });
-
-      const response = await client.insert(tableName, {
-        id: 1,
-        data: smallData,
-      });
-
-      // Verify no compression was applied
-      expect(response.sizes.request).toBe(response.sizes.requestUncompressed);
-      expect(response.sizes.request).toBeLessThan(1024);
-      expect(response.durations.encoding).toBe(0);
-      expect(response.durations.total).toBeGreaterThan(0);
-
-      await client.drop(tableName);
-    });
-
     it('should respect compression setting when disabled', async () => {
       const clientWithoutCompression = new CrateDBClient({
         host: container.getHost(),
         port: container.getMappedPort(4200),
-        enableCompression: false,
+        compression: { request: 'none' },
       });
 
       const largeData = Array(1000).fill('test data').join(' ');
